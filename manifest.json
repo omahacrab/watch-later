@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Watch Later: YouTube Playlists & Feeds",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Search, move and copy playlist videos. Restore removals and build feeds from channels and categories.",
   "minimum_chrome_version": "120",
   "permissions": [

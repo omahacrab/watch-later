@@ -10,6 +10,7 @@ import {extractPlaylistTotal, capacity} from './counts.js';
 import {BATCH_SIZE, parsePlaylist, mergeEntries, filterEntries, parseSearch, batches, confirmRemoval, mergeRemovalHistory} from './core.js';
 import {youtubeRequest} from './youtube.js';
 const $ = id => document.getElementById(id);
+let statusTimer=null;
 let sourceId='WL',sourceTitle='Watch Later',searchPaused=false,transferMode='move',preferredTabId=null,recentRemovalIds=[];
 let tabId, account, state = {videos: [], complete: false, updated: null, pending: null};
 let selected = new Set(), page = 0, busy = false, stopped = false, connecting = false;
@@ -42,7 +43,7 @@ async function refreshTotal() {
   await save(); render();
 }
 const storageKey = () => sourceId==='WL'?`playlist:${account}`:`playlist:${account}:${sourceId}`;
-function message(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
+function message(text, error = false) { clearTimeout(statusTimer);$('status').textContent = text;$('status').classList.toggle('error', error);$('status').hidden=!busy&&!error&&!/removed|copied|moved|restored|finished|stopped|recovered|saved|updated|created|deleted/i.test(text);if(!busy&&!error)statusTimer=setTimeout(()=>{$('status').hidden=true;},6500); }
 async function save() { if(!account)return;const historyKey=`history:${account}`;const stored=(await chrome.storage.local.get(historyKey))[historyKey]||[];state.history=recoverHistoryDetails(mergeRemovalHistory(stored,state.history),state.recoveredMetadata); await chrome.storage.local.set({[storageKey()]: state,[historyKey]:state.history}); }
 async function call(operation, payload = {}) {
   if (!tabId) throw new Error('Connect to YouTube first.');
@@ -58,7 +59,7 @@ async function call(operation, payload = {}) {
 }
 function matchingUnsorted() {
  const index=channelIndex(state.videos);
- const scope=state.videos.filter(v=>(channelFilter===null || sharesChannel(v,channelFilter,index)) && ($('watch-filter').value==='range'?typeof v.watchedPercent==='number'&&v.watchedPercent>=Number($('played-min').value)&&v.watchedPercent<=Number($('played-max').value):watchMatches(v,$('watch-filter').value)));
+ const scope=state.videos.filter(v=>($('availability').value!=='available'||!v.unavailable)&&(channelFilter===null || sharesChannel(v,channelFilter,index)) && ($('watch-filter').value==='range'?typeof v.watchedPercent==='number'&&v.watchedPercent>=Number($('played-min').value)&&v.watchedPercent<=Number($('played-max').value):watchMatches(v,$('watch-filter').value)));
  const terms=searchPaused?[]:[...searchPills,$('watch-later-cleaner-search').value.trim()].filter(Boolean);
  if(!terms.length)return filterEntries(scope,'',$('field').value,$('unavailable').checked);
  if(terms.some(t=>parseSearch(t).error))return [];
@@ -110,6 +111,7 @@ function render() {
   $('refresh-count').disabled = busy || connecting || !account;
   const matches = matching();
   const searchError = searchPaused?null:[...searchPills,$('watch-later-cleaner-search').value].map(t=>parseSearch(t).error).find(Boolean);
+  $('search-help').hidden=!searchError;
   $('search-help').textContent = searchError || 'Comma saves an OR pill and shows all videos until you type again. Enter applies pills. Quotes keep commas inside phrases. Title/channel selector applies to all pills; title: and channel: override it.';
   $('watch-later-cleaner-search').setAttribute('aria-invalid', String(!!searchError));
   const pages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
@@ -122,7 +124,17 @@ function render() {
   $('load').disabled = busy || !account;
   $('connect').disabled = busy || connecting;
   $('connect').textContent = connecting ? 'Connecting…' : account ? 'Reconnect' : 'Connect';
-  $('stop').disabled = !busy;
+  $('stop').disabled = !busy;$('stop').hidden=!busy;
+  $('header-connection').textContent=connecting?'Connecting…':account?'Connected to YouTube':'Not connected';
+  $('search-pause-note').hidden=!searchPaused;
+  $('clear-search').hidden=!searchPills.length&&!$('watch-later-cleaner-search').value;
+  $('clear-filters').hidden=$('watch-filter').value==='all'&&$('availability').value==='all'&&!channelFilter;
+  for(const id of ['clear','move','remove','selected-view'])$(id).hidden=!selected.size;
+  $('selection-hint').hidden=selected.size>0;
+  $('selected-move').disabled=$('selected-remove').disabled=busy||!selected.size||!state.complete||!!state.pending;
+  $('selected-clear').disabled=busy||!selected.size;
+  $('watch-nav-count').textContent=state.youtubeCount?.value?.toLocaleString()||'';$('watch-nav-count').hidden=!account||sourceId!=='WL';
+  $('history-nav-count').textContent=(state.history||[]).length.toLocaleString();$('history-nav-count').hidden=!(state.history||[]).length;
   $('export').disabled = !state.videos.length;
   $('forget').disabled = busy || !account;
   const selectable = matches.filter(v => v.setVideoId);
@@ -130,17 +142,17 @@ function render() {
   $('select-all-checkbox').checked = selectable.length > 0 && selectedMatches === selectable.length;
   $('select-all-checkbox').indeterminate = selectedMatches > 0 && selectedMatches < selectable.length;
   $('select-all-checkbox').disabled = busy || !selectable.length;
-  $('selected-view').textContent = `Selected videos (${selected.size.toLocaleString()})`;
+  $('selected-view').textContent = `${selected.size.toLocaleString()} selected${hidden?` · ${hidden} outside this search`:''} ↗`;
   $('selected-view').disabled = !selected.size;
   $('select').disabled = busy || !selectable.length;
   $('clear').disabled = busy || !selected.size;
   $('remove').disabled = busy || !selected.size || !state.complete || !!state.pending;
   $('move').disabled = $('remove').disabled;
-  $('watch-later-cleaner-search').disabled = busy; $('field').disabled = busy; $('unavailable').disabled = busy; $('watch-filter').disabled = busy;
+  $('watch-later-cleaner-search').disabled = busy; $('field').disabled = busy; $('unavailable').disabled = busy; $('watch-filter').disabled = busy;$('availability').disabled=busy;
   $('prev').disabled = page === 0; $('next').disabled = page >= pages - 1;
   $('prev-top').disabled = $('prev').disabled; $('next-top').disabled = $('next').disabled;
   $('pageinfo').textContent = matches.length ? `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, matches.length)} of ${matches.length} · Select all includes every page` : '';
-  $('pageinfo-top').textContent = $('pageinfo').textContent;
+  $('pageinfo-top').textContent = matches.length?`${page*PAGE_SIZE+1}–${Math.min((page+1)*PAGE_SIZE,matches.length)}`:'0';
   const rows = $('rows'); rows.replaceChildren();
   if (!matches.length) {
     const empty = document.createElement('div'); empty.className = 'empty';
@@ -150,15 +162,15 @@ function render() {
   }
   const index = channelIndex(state.videos);
   for (const [offset,video] of matches.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).entries()) {
-    const row = document.createElement('div'); row.className = `video-row${selected.has(video.key) ? ' chosen' : ''}`;
+    const row = document.createElement('div'); row.className = `video-row video${selected.has(video.key) ? ' chosen' : ''}`;
     const check = document.createElement('input'); check.type = 'checkbox'; check.checked = selected.has(video.key); check.disabled = busy || !video.setVideoId;
     check.setAttribute('aria-label', `Select ${video.title}`);
     check.addEventListener('click', event => {
       selectionAnchor = selectRange(selected, matches, selectionAnchor, video.key, event.shiftKey, check.checked);
       render();
     });
-    const details = document.createElement('div'); details.className = 'video-details';
-    const thumbnail = document.createElement('span'); thumbnail.className = 'video-thumbnail';
+    const details = document.createElement('div'); details.className = 'video-details videoinfo';
+    const thumbnail = document.createElement('span'); thumbnail.className = 'video-thumbnail thumb';
     thumbnail.setAttribute('aria-hidden', 'true');
     if (video.videoId && !video.unavailable) {
       const img = document.createElement('img');
@@ -172,10 +184,10 @@ function render() {
       const progress=document.createElement('span');progress.className='watched-bar';progress.style.width=`${video.watchedPercent}%`;thumbnail.append(progress);
     }
     const description = document.createElement('div'); description.className = 'video-description';
-    const title = document.createElement(video.videoId ? 'a' : 'strong'); title.textContent = video.title;
+    const title = document.createElement(video.videoId ? 'a' : 'strong'); title.textContent = video.title;title.className='videotitle';
     if (video.videoId) { title.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}`; title.target = '_blank'; title.rel = 'noopener noreferrer'; }
     const subtitle = document.createElement('small'); subtitle.textContent = [video.channel, typeof video.watchedPercent==='number'?`${video.watchedPercent}% played`:'', video.unavailable ? 'Unavailable' : '', !video.setVideoId ? 'No removal ID supplied by YouTube' : ''].filter(Boolean).join(' · ');
-    const channelLine = document.createElement('div'); channelLine.className = 'channel-line';
+    const channelLine = document.createElement('div'); channelLine.className = 'channel-line videometa';
     const allFromChannel = document.createElement('button');
     allFromChannel.type = 'button'; allFromChannel.className = 'channel-action';
     const rowChannels = channelsFor(video, index);
@@ -186,9 +198,9 @@ function render() {
       selectionAnchor = null; channelFilter = rowChannels;
       searchPills=[];searchPaused=false; $('watch-filter').value='all';
       $('watch-later-cleaner-search').value = '';
-      $('field').value = 'both'; $('unavailable').checked = false;
+      $('field').value = 'both'; $('unavailable').checked = false;$('availability').value='all';
       page = 0; render();
-      message(`Showing ${matching().length} saved Watch Later videos from ${rowChannels.map(c => c.name).join(' or ')}.${state.channelMetadataVersion === 1 ? '' : ' Refresh the playlist once to collect channel IDs for more reliable matching.'}`);
+      message(`Showing ${matching().length} saved videos from ${rowChannels.map(c => c.name).join(' or ')}.${state.channelMetadataVersion === 1 ? '' : ' Refresh the playlist once to collect channel IDs for more reliable matching.'}`);
       revealFirstChannelResult();
 
     };
@@ -199,13 +211,13 @@ function render() {
     description.append(title, channelLine);
     details.append(thumbnail, description);
     const duration = document.createElement('span'); duration.className = 'duration'; duration.textContent = video.duration || '—';
-    const rowActions = document.createElement('div'); rowActions.className = 'row-actions';
+    const rowActions = document.createElement('div'); rowActions.className = 'row-actions rowactions';
     const removeOne = document.createElement('button'); removeOne.textContent = 'Remove'; removeOne.className = 'danger row-remove';
     removeOne.disabled = busy || !state.complete || !!state.pending || !video.setVideoId;
     removeOne.setAttribute('aria-label', `Remove ${video.title} from ${sourceTitle}`);
     removeOne.onclick = () => remove([video]);
     const moveOne=document.createElement('button');moveOne.textContent='Move…';moveOne.className='row-remove';moveOne.disabled=removeOne.disabled || !video.videoId;moveOne.onclick=()=>openMove([video]);
-    rowActions.append(duration, moveOne, removeOne);
+    rowActions.append(moveOne, removeOne);
     if(video.unavailable&&!video.recovered){
      const attempt=state.recoveryAttempts?.[video.videoId];
      if(attempt){const status=document.createElement('small');status.className='recovery-row-status';status.textContent=attempt.status==='not_found'?'No recoverable details found':`Recovery failed: ${attempt.error}`;status.title=`Last attempted ${new Date(attempt.checkedAt).toLocaleString()}`;description.append(status);}
@@ -213,7 +225,7 @@ function render() {
     }
     const position=document.createElement('span');position.className='row-number';position.textContent=String(page*PAGE_SIZE+offset+1);
     const selectionCell=document.createElement('div');selectionCell.className='row-selector';selectionCell.append(position,check);
-    row.append(selectionCell, details, rowActions); rows.append(row);
+    row.append(selectionCell, details, duration, rowActions); rows.append(row);
   }
 }
 
@@ -437,7 +449,7 @@ $('sort').onchange=async()=>{
 };
 function clearSearch(){
  searchPills=[];searchPaused=false;channelFilter=null;selectionAnchor=null;page=0;
- $('watch-later-cleaner-search').value='';$('unavailable').checked=false;$('watch-filter').value='all';
+ $('watch-later-cleaner-search').value='';$('unavailable').checked=false;$('watch-filter').value='all';$('availability').value='all';
  $('search-again').hidden=true;render();
  $('watch-later-cleaner-search').focus?.({preventScroll:true});
 }
@@ -509,7 +521,7 @@ async function openMove(items,manage=false) {
  const countGeneration=++playlistCountGeneration;
  moveItems=manage?[]:items || state.videos.filter(v=>selected.has(v.key));
  if(!manage&&(!moveItems.length || moveItems.some(v=>!v.videoId || !v.setVideoId))){message('Every selected video needs a video ID and removal ID to move.',true);return;}
- $('move-heading').textContent=manage?'Manage playlists':'Move to playlists';
+ $('move-heading').textContent=manage?'Manage playlists':`Move ${moveItems.length} ${moveItems.length===1?'video':'videos'}`;
  $('move-cancel').textContent=manage?'Close':'Cancel';
  $('move-status').textContent='Loading your editable playlists…';
  destinations=[];moveDestinationIds.clear();updateDestinationOptions();$('move-target').value='existing';
@@ -522,7 +534,7 @@ async function openMove(items,manage=false) {
   moveDestinationIds=new Set();
   updateDestinationOptions();
   $('move-target').value=destinations[0]?.id || 'new';updateMoveForm();
-  $('move-status').textContent=manage?'Create a playlist or delete one below.':`${moveItems.length} videos. Add to destination, verify they are there, then remove from ${sourceTitle}.`;
+  $('move-status').textContent=manage?'Create a playlist or delete one below.':'Choose one or more destination playlists.';
   $('move-create-only').disabled=false; $('move-new').disabled=false; $('move-existing').disabled=!destinations.length;
   void loadPlaylistCounts(countGeneration,account);
  } catch(error){
@@ -585,14 +597,15 @@ function updateMoveForm(){
  $('move-confirm').hidden=managingPlaylists;
  $('move-destination-count').hidden=managingPlaylists;
  $('move-explanation').hidden=managingPlaylists;
- $('move-create-only').hidden=!create;
+ $('move-create-only').hidden=!create;$('move-search').hidden=create;$('move-new').hidden=create;
  $('move-name-wrap').hidden=!create; $('move-existing-wrap').hidden=create;
  $('move-new').setAttribute('aria-pressed',String(create));$('move-existing').setAttribute('aria-pressed',String(!create));
  $('move-confirm').textContent=create?`Create playlist & ${transferMode} videos`:`${transferMode==='copy'?'Copy':'Move'} ${moveItems.length} ${moveItems.length===1?'video':'videos'}`;
  $('transfer-toggle').hidden=managingPlaylists;$('transfer-menu').hidden=true;
  $('transfer-toggle').setAttribute('aria-expanded','false');
  $('move-explanation').textContent=transferMode==='copy'?`Videos stay in ${sourceTitle}. Copies are checked in every destination.`:`Videos are removed from ${sourceTitle} only after every destination is verified. Moves are recorded in history.`;
- $('move-destination-count').textContent=`${moveDestinationIds.size} playlists selected. Videos will be copied to every selected playlist ${transferMode==='copy'?`and kept in ${sourceTitle}`:`before removal from ${sourceTitle}`}.`;
+ $('move-destination-count').textContent=`${moveDestinationIds.size} ${moveDestinationIds.size===1?'playlist':'playlists'} selected`;
+ $('move-heading').textContent=managingPlaylists?'Manage playlists':`${transferMode==='copy'?'Copy':'Move'} ${moveItems.length} ${moveItems.length===1?'video':'videos'}`;
  $('move-confirm').disabled=!create&&!moveDestinationIds.size;
  renderPlaylistPicker();
 }
@@ -772,6 +785,11 @@ function renderSelected() {
 }
 $('selected-view').onclick=()=>{selectedPage=0;renderSelected();$('selected-dialog').showModal();};
 $('selected-close').onclick=()=>$('selected-dialog').close();
+$('selected-move').onclick=()=>{$('selected-dialog').close();openMove();};
+$('selected-remove').onclick=()=>{$('selected-dialog').close();review();};
+$('selected-clear').onclick=()=>{selected.clear();render();};
+$('move-close').onclick=()=>{if(!busy)$('move-dialog').close();};
+$('clear-filters').onclick=()=>{$('watch-filter').value='all';$('availability').value='all';$('unavailable').checked=false;channelFilter=null;page=0;render();};
 $('selected-prev').onclick=()=>{selectedPage--;renderSelected();};
 $('selected-next').onclick=()=>{selectedPage++;renderSelected();};
 $('select-all-checkbox').onchange=()=>{
@@ -880,7 +898,9 @@ $('watch-later-cleaner-search').addEventListener('keydown',event=>{
   if(!parseSearch(term).error){searchPaused=false;if(!searchPills.includes(term))searchPills.push(term);$('watch-later-cleaner-search').value='';selectionAnchor=null;page=0;render();}
  }
 });
+$('availability').onchange=()=>{$('unavailable').checked=$('availability').value==='unavailable';$('unavailable').dispatchEvent(new Event('input'));};
 $('unavailable').addEventListener('input',async()=>{
+ if($('unavailable').checked)$('availability').value='unavailable';else if($('availability').value==='unavailable')$('availability').value='all';
  selectionAnchor=null;page=0;
  if($('unavailable').checked && !state.unavailableRequested){
   const preserved=[...selected];await load();const present=new Set(state.videos.map(v=>v.key));preserved.filter(k=>present.has(k)).forEach(k=>selected.add(k));

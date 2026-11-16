@@ -2,11 +2,15 @@
 
 Search your saved videos, organise playlists, restore removals, and build personal feeds from channels and categories.
 
-**v0.2.0 is an experimental release candidate.** It uses YouTube's internal web endpoints, which can change without notice. Automated checks cover the main workflows; this release still needs verification against a real signed-in YouTube account. This is an independent project, not affiliated with YouTube or Google.
+**v0.2.1 is an experimental release candidate.** It uses YouTube's internal web endpoints, which can change without notice. Automated checks cover the main workflows; this release still needs verification against a real signed-in YouTube account. This is an independent project, not affiliated with YouTube or Google.
+
+The v0.2.1 update restores the approved compact interface: counts beside the title, sticky search and selection tools, a selected-video drawer, compact playlist cards and the merged feeds/category view. The header displays the installed version.
+
+![v0.2.1 interface with test data](docs/images/v0.2.1-workspace.jpg)
 
 ## Install in Chrome
 
-1. [Download watch-later-v0.2.0.zip](https://github.com/omahacrab/watch-later/raw/refs/heads/main/downloads/watch-later-v0.2.0.zip).
+1. [Download watch-later-v0.2.1.zip](https://github.com/omahacrab/watch-later/raw/refs/heads/main/downloads/watch-later-v0.2.1.zip).
 2. Extract the ZIP. Keep the extracted `watch-later` folder somewhere permanent.
 3. Open `chrome://extensions` and enable **Developer mode**.
 4. Choose **Load unpacked**, then select the folder that directly contains `manifest.json`. Do not select the ZIP or its outer download folder.

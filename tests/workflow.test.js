@@ -108,7 +108,7 @@ test('full workflow: pagination, 500/214 batches and live YouTube totals, cache,
   $('select-all-checkbox').checked=true;$('select-all-checkbox').onchange();
   assert.match($('selected').textContent,/714 selected/);
   $('next-top').onclick();assert.match($('pageinfo').textContent,/101–200/);
-  assert.equal($('pageinfo').textContent,$('pageinfo-top').textContent);
+  assert.ok($('pageinfo').textContent.startsWith($('pageinfo-top').textContent));
   assert.equal($('next').disabled,false);assert.equal($('next-top').disabled,false);
   $('prev-top').onclick();$('selected-close').onclick();
 

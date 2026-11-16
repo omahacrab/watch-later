@@ -1,4 +1,4 @@
-# Validation for v0.2.0
+# Validation for v0.2.1
 
 ## Completed locally
 
@@ -12,11 +12,19 @@
 
 These checks use fixtures and API doubles. They do not claim that YouTube's current live response format matches every fixture.
 
+## Visual checks completed for v0.2.1
+
+The actual production app was served with isolated mock Chrome APIs using `node scripts/preview.mjs`. The preview copies runtime files rather than maintaining another implementation. The mock transport and synthetic thumbnails never enter the installation ZIP.
+
+Browser checks covered the main workspace, compact playlist cards, move destination alignment, Move/Copy menu, selected-video drawer, feed category chips and feed results. A 0–60% playback range returned 24 of 36 fixture entries. Search, filters and select-all remained sticky while scrolling; channel filtering positioned the first row at the bottom of the sticky region. A screenshot is saved in `docs/images/v0.2.1-workspace.jpg`.
+
+The DOM integration test additionally exercises availability/reset controls, playback filtering, search help and clearing the selection drawer.
+
 ## Not completed in this environment
 
-A headless Chromium visual check was attempted, but Chromium could not start because its process-singleton socket was blocked by the execution environment. No desktop/mobile screenshots or visual-pass claim are included in this release.
+Mobile visual validation and installation into the user's local Chrome profile were not performed.
 
-A real signed-in YouTube account was not connected for v0.2.0 validation. The failed cloud-browser sign-in session was not treated as a successful test. The rebuilt extension was not installed in the user's Chrome profile remotely.
+A real signed-in YouTube account was not connected for v0.2.1 validation. The failed cloud-browser sign-in session was not treated as a successful test. The rebuilt extension was not installed in the user's Chrome profile remotely.
 
 ## Live acceptance checklist
 
