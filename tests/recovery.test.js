@@ -55,3 +55,9 @@ test('older removal history gains cached details without changing restoration st
  assert.equal(result.restoredAt,200);assert.equal(result.removedAt,100);assert.equal(result.video.setVideoId,'s');
  assert.equal(entry.video.title,'Deleted video');
 });
+
+
+test('denied archive permission still checks YouTube and never contacts the archive',async()=>{
+ const urls=[];const missing=await recoverDetails('abcdefghijk',{allowArchive:false,fetcher:async url=>{urls.push(url);return {ok:false,status:404};}});assert.equal(missing,null);assert.equal(urls.length,1);assert.ok(urls[0].startsWith('https://www.youtube.com/oembed'));
+ const found=await recoverDetails('abcdefghijk',{allowArchive:false,fetcher:async()=>({ok:true,json:async()=>({title:'Recovered without archive',author_name:'Channel'})})});assert.equal(found.source,'youtube');
+});

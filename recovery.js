@@ -37,7 +37,7 @@ export function applyRecovered(videos,cache={}){
   return {...v,title:detail.title,channel:detail.channel||v.channel,channels:detail.channel?[{id:detail.channelId||'',name:detail.channel}]:v.channels,recovered:detail};
  });
 }
-export async function recoverDetails(id,{fetcher=fetch,signal,onStage=()=>{}}={}){
+export async function recoverDetails(id,{fetcher=fetch,signal,allowArchive=true,onStage=()=>{}}={}){
  if(!validId(id))throw new Error('This entry has no usable video ID.');
  const get=async(url,json=true)=>{
   signal?.throwIfAborted();
@@ -54,6 +54,7 @@ export async function recoverDetails(id,{fetcher=fetch,signal,onStage=()=>{}}={}
  let live=null;
  try{live=await get(`https://www.youtube.com/oembed?url=${encodeURIComponent('https://www.youtube.com/watch?v='+id)}&format=json`);}catch(error){if(signal?.aborted||/Rate limited/.test(error.message))throw error;}
  if(useful(live?.title))return {title:live.title,channel:live.author_name||'',channelId:'',source:'youtube',sourceUrl:`https://www.youtube.com/watch?v=${id}`,recoveredAt:Date.now()};
+ if(!allowArchive)return null;
  onStage('Looking for archived pages');
  const cdx=await get(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent('youtube.com/watch?v='+id)}&output=json&filter=statuscode:200&filter=mimetype:text/html&collapse=digest&filter=!digest:-&limit=-8`);
  if(!Array.isArray(cdx)||cdx.length<2)return null;

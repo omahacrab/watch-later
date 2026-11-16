@@ -6,6 +6,10 @@ class Element {
   append(...children){this.children.push(...children)}
   replaceChildren(...children){this.children=children}
   setAttribute(){}
+  removeAttribute(){}
+  before(){}
+  querySelector(){return new Element()}
+  querySelectorAll(){return []}
   addEventListener(event,handler){this.listeners[event]=handler}
   focus(options){this.focused=true;this.focusOptions=options}
   showModal(){this.open=true}
@@ -14,7 +18,7 @@ class Element {
 test('full workflow: pagination, 500/214 batches and live YouTube totals, cache, unconfirmed batch, refresh and stop',async()=>{
   const elements=new Map();
   const $=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id)};
-  globalThis.document={getElementById:$,createElement:()=>new Element()};
+  globalThis.document={getElementById:$,createElement:()=>new Element(),querySelector:()=>new Element(),querySelectorAll:()=>[],addEventListener(){},dispatchEvent(){}};
   globalThis.window={addEventListener(){},requestAnimationFrame:fn=>fn(),scrollTo(){throw new Error('Unexpected forced scroll')}};
   globalThis.confirm=()=>{throw new Error('Unexpected confirmation')};
   Object.defineProperty(globalThis.navigator,'locks',{configurable:true,value:{request:async(name,options,fn)=>fn({})}});
@@ -26,7 +30,7 @@ test('full workflow: pagination, 500/214 batches and live YouTube totals, cache,
   const destination=[];const otherDestinations=new Map();let failedDestination=null;
   const destinationFor=id=>id==='PL_DEST'?destination:(otherDestinations.has(id)?otherDestinations.get(id):(otherDestinations.set(id,[]),otherDestinations.get(id))); 
   const originals = new Map(videos.map(v=>[v.videoId,v]));
-  globalThis.chrome={storage:{local:{get:async key=>structuredClone({[key]:cache[key]}),set:async data=>Object.assign(cache,structuredClone(data)),remove:async key=>delete cache[key]}},tabs:{query:async()=>[{id:1,url:'https://www.youtube.com/playlist?list=WL'}]},scripting:{executeScript:async({args:[operation,payload]})=>{
+  globalThis.chrome={storage:{local:{get:async key=>structuredClone(key===null?cache:Array.isArray(key)?Object.fromEntries(key.map(k=>[k,cache[k]])):{[key]:cache[key]}),set:async data=>Object.assign(cache,structuredClone(data)),remove:async key=>delete cache[key]}},tabs:{query:async()=>[{id:1,url:'https://www.youtube.com/playlist?list=WL'}]},scripting:{executeScript:async({args:[operation,payload]})=>{
     if(operation==='identity')return [{result:{ok:true,account:'account-A'}}];
     requests.push({operation,...payload});
     if(operation==='playlists'&&(!payload.videoId||pickerFailure))return [{result:{ok:false,error:'YouTube returned HTTP 400.'}}];
@@ -42,8 +46,8 @@ test('full workflow: pagination, 500/214 batches and live YouTube totals, cache,
       destinationFor(payload.playlistId).push(...videos.filter(v=>payload.ids.includes(v.videoId)).map(v=>({...v,setVideoId:`dest-${v.videoId}`})));
       return [{result:{ok:true,data:{status:'STATUS_SUCCEEDED'}}}];
     }
-    if(operation==='browse'&&payload.playlistId&&!destinationFor(payload.playlistId).length)return [{result:{ok:true,data:{contents:{twoColumnBrowseResultsRenderer:{tabs:[{tabRenderer:{selected:true,content:{sectionListRenderer:{contents:[{messageRenderer:{text:{simpleText:'This playlist has no videos.'}}}]}}}}]}}}}}];
-    if(operation==='browse'&&payload.playlistId)return [{result:{ok:true,data:{...(countProbe?{playlistHeaderRenderer:{numVideosText:{simpleText:`${destinationFor(payload.playlistId).length} videos`}}}:{}),playlistVideoListRenderer:{contents:destinationFor(payload.playlistId).map(playlistVideoRenderer=>({playlistVideoRenderer}))}}}}];
+    if(operation==='browse'&&payload.playlistId&&payload.playlistId!=='WL'&&!destinationFor(payload.playlistId).length)return [{result:{ok:true,data:{contents:{twoColumnBrowseResultsRenderer:{tabs:[{tabRenderer:{selected:true,content:{sectionListRenderer:{contents:[{messageRenderer:{text:{simpleText:'This playlist has no videos.'}}}]}}}}]}}}}}];
+    if(operation==='browse'&&payload.playlistId&&payload.playlistId!=='WL')return [{result:{ok:true,data:{...(countProbe?{playlistHeaderRenderer:{numVideosText:{simpleText:`${destinationFor(payload.playlistId).length} videos`}}}:{}),playlistVideoListRenderer:{contents:destinationFor(payload.playlistId).map(playlistVideoRenderer=>({playlistVideoRenderer}))}}}}];
     if(operation==='restore'){
       for(const id of payload.ids)videos.push({...originals.get(id),setVideoId:`restored-${id}`});
       return [{result:{ok:true,data:{status:'STATUS_SUCCEEDED'}}}];
@@ -103,9 +107,9 @@ test('full workflow: pagination, 500/214 batches and live YouTube totals, cache,
   assert.equal($('select-all-checkbox').indeterminate,true);
   $('select-all-checkbox').checked=true;$('select-all-checkbox').onchange();
   assert.match($('selected').textContent,/714 selected/);
-  $('next-top').onclick();assert.match($('pageinfo').textContent,/501–714/);
+  $('next-top').onclick();assert.match($('pageinfo').textContent,/101–200/);
   assert.equal($('pageinfo').textContent,$('pageinfo-top').textContent);
-  assert.equal($('next').disabled,true);assert.equal($('next-top').disabled,true);
+  assert.equal($('next').disabled,false);assert.equal($('next-top').disabled,false);
   $('prev-top').onclick();$('selected-close').onclick();
 
   $('remove').onclick();assert.equal($('review-list').children.length,714);
@@ -211,7 +215,7 @@ test('full workflow: pagination, 500/214 batches and live YouTube totals, cache,
   assert.equal($('move-playlists').children[0].children[0].children[0].checked,true);
   assert.equal($('move-playlists').children[0].children[0].children[1].textContent,'Create without moving');
   assert.equal($('move-playlists').children[0].children[0].children[2].textContent,'0 videos');
-  assert.equal($('move-confirm').textContent,'Move videos');
+  assert.equal($('move-confirm').textContent,'Move 1 video');
   for(const row of $('move-playlists').children){
    assert.equal(row.children[0].children[0].disabled,false,'Destination checkbox re-enabled after creation');
    assert.equal(row.children[1].children[1].disabled,false,'Delete re-enabled after creation');

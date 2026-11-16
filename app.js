@@ -7,7 +7,7 @@ import {splitPills,watchMatches} from './search-pills.js';
 import {selectRange} from './selection.js';
 import {channelIndex, channelsFor, sharesChannel} from './channels.js';
 import {extractPlaylistTotal, capacity} from './counts.js';
-import {BATCH_SIZE, parsePlaylist, mergeEntries, filterEntries, parseSearch, batches, confirmRemoval} from './core.js';
+import {BATCH_SIZE, parsePlaylist, mergeEntries, filterEntries, parseSearch, batches, confirmRemoval, mergeRemovalHistory} from './core.js';
 import {youtubeRequest} from './youtube.js';
 const $ = id => document.getElementById(id);
 let sourceId='WL',sourceTitle='Watch Later',searchPaused=false,transferMode='move',preferredTabId=null,recentRemovalIds=[];
@@ -43,13 +43,14 @@ async function refreshTotal() {
 }
 const storageKey = () => sourceId==='WL'?`playlist:${account}`:`playlist:${account}:${sourceId}`;
 function message(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
-async function save() { state.history=recoverHistoryDetails(state.history,state.recoveredMetadata); await chrome.storage.local.set({[storageKey()]: state,[`history:${account}`]:state.history||[]}); }
+async function save() { if(!account)return;const historyKey=`history:${account}`;const stored=(await chrome.storage.local.get(historyKey))[historyKey]||[];state.history=recoverHistoryDetails(mergeRemovalHistory(stored,state.history),state.recoveredMetadata); await chrome.storage.local.set({[storageKey()]: state,[historyKey]:state.history}); }
 async function call(operation, payload = {}) {
   if (!tabId) throw new Error('Connect to YouTube first.');
   const results = await chrome.scripting.executeScript({target: {tabId}, world: 'MAIN', func: youtubeRequest, args: [operation, {playlistId:sourceId,...payload, ...(account ? {account} : {})}]});
   const result = results[0]?.result;
   if (!result?.ok) throw new Error(result?.error || 'YouTube tab is unavailable. Reconnect.');
-  if(['add-to-playlist','restore'].includes(operation)&&result.data?.status==='STATUS_SUCCEEDED'){
+  if(['add-to-playlist','restore','remove'].includes(operation)&&result.data?.status==='STATUS_SUCCEEDED'){
+    document.dispatchEvent(new CustomEvent('playlist-mutated',{detail:{id:payload.playlistId||sourceId}}));
     const id=payload.playlistId||sourceId;
     if(id!==sourceId){const key=id==='WL'?`playlist:${account}`:`playlist:${account}:${id}`;const cached=(await chrome.storage.local.get(key))[key];if(cached){cached.complete=false;if(cached.youtubeCount)cached.youtubeCount.stale=true;await chrome.storage.local.set({[key]:cached});}}
   }
@@ -226,7 +227,7 @@ async function recoverMissing(items){
  let allowed;
  try{allowed=await chrome.permissions.request({origins:['https://web.archive.org/*']});}
  catch(error){message(error.message,true);return;}
- if(!allowed){message('Archive access was not granted. No details changed.',true);return;}
+ if(!allowed)message('Archive access was not granted. Checking YouTube metadata only.');
  if(owner!==account)return;
  await exclusive(async()=>{
   const latest=(await chrome.storage.local.get(storageKey()))[storageKey()];
@@ -243,7 +244,7 @@ async function recoverMissing(items){
     if(stopped)break;
     let detail=state.recoveredMetadata?.[video.videoId];
     try{
-     detail ||= await recoverDetails(video.videoId,{signal:recoveryController.signal,onStage:stage=>message(`Recovering details ${checked+1}/${unique.length}: ${stage}… ${found} recovered.`)});
+     detail ||= await recoverDetails(video.videoId,{allowArchive:allowed,signal:recoveryController.signal,onStage:stage=>message(`Recovering details ${checked+1}/${unique.length}: ${stage}… ${found} recovered.`)});
     }catch(error){
      if(stopped)break;
      state.recoveryAttempts||={};state.recoveryAttempts[video.videoId]={status:'error',error:error.message,checkedAt:Date.now()};await save();checked++;failed++;updateCount();render();
@@ -258,7 +259,7 @@ async function recoverMissing(items){
     if(checked<unique.length&&!stopped)await new Promise(resolve=>setTimeout(resolve,1000));
    }
    updateCount(stopped?'Stopped':'Finished');
-   message(`${stopped?'Stopped':'Recovery finished'}: ${found} recovered, ${checked-found} not recovered (see row status). Videos remain marked unavailable.`);
+   message(`${stopped?'Stopped':'Recovery finished'}: ${found} recovered, ${checked-found} not recovered (see row status). Videos remain marked unavailable.${allowed?'':' Archive was not checked because permission was not granted.'}`);
   }finally{recoveryController=null;}
  });
 }
@@ -330,7 +331,7 @@ async function exclusive(task) {
 async function recoverPending(){
  if(!state.pending)return;
  if(state.pending.kind==='restore'){
-  const pending=state.pending;stopped=false;const present=await readDestination(pending.playlistId||sourceId,'reconciling restore');
+  const pending=state.pending;pending.historyIds||=[];stopped=false;const present=await readDestination(pending.playlistId||sourceId,'reconciling restore');
   for(const h of state.history||[])if(pending.historyIds.includes(h.historyId)&&present.has(h.video.videoId))h.restoredAt=Date.now();
   state.pending=null;await save();await scan();return;
  }
@@ -496,8 +497,8 @@ async function fetchEditablePlaylists(){
  // This is YouTube's video-specific Save menu, not a standalone playlist index.
  let videoId=moveItems.find(v=>v.videoId&&!v.unavailable)?.videoId || state.videos.find(v=>v.videoId&&!v.unavailable)?.videoId;
  if(!videoId){
-  const first=await call('browse',{});
-  videoId=parsePlaylist(first.data,true).videos.find(v=>v.videoId&&!v.unavailable)?.videoId;
+  const first=await call('browse',{playlistId:'WL'});
+  videoId=emptyDestination(first.data)?null:parsePlaylist(first.data,true).videos.find(v=>v.videoId&&!v.unavailable)?.videoId;
  }
  if(!videoId)throw new Error('YouTube needs an available video to list editable playlists. Load Watch Later with an available video, then reopen this window. You can still create a playlist.');
  return call('playlists',{videoId});
@@ -632,6 +633,7 @@ async function createPlaylistOnly(){
     const id=created.data?.playlistId;
     if(typeof id!=='string'||!id||id==='WL')throw new Error('YouTube did not confirm the new playlist.');
     destinations=[{id,title,videoCount:0},...destinations.filter(p=>p.id!==id)];
+    document.dispatchEvent(new CustomEvent('playlist-created',{detail:{id,title,videoCount:0}}));
     moveDestinationIds.add(id);
     updateDestinationOptions();$('move-target').value=id;$('move-search').value='';
     updateMoveForm();
@@ -668,6 +670,8 @@ async function performMove(){
    const id=created.data?.playlistId;
    if(typeof id!=='string' || !id || id==='WL')throw new Error('New playlist creation was not confirmed. Nothing removed; check YouTube before retrying.');
    targets=[...targets.filter(p=>p.id!==id),{id,title}];
+   destinations=[{id,title},...destinations.filter(p=>p.id!==id)];
+   document.dispatchEvent(new CustomEvent('playlist-created',{detail:{id,title,videoCount:0}}));
   }
   if(!targets.length)throw new Error('Select at least one destination playlist.');
   const destination={title:targets.map(p=>p.title).join(', ')};
@@ -678,7 +682,7 @@ async function performMove(){
    if(stopped)break;
    const allIds=[...new Set(batch.map(v=>v.videoId))];
    state.pending={kind:'move',phase:'adding',destination,destinations:targets,videos:batch,started:Date.now()};await save();
-   message(`Moving to ${targets.length} playlists: ${moved} done. Copying and verifying every destination…`);
+   message(`${transferMode==='copy'?'Copying':'Moving'} to ${targets.length} playlists: ${moved} done. Copying and verifying every destination…`);
    for(const target of targets){
     if(stopped)throw new Error('Move stopped. Source videos were kept.');
     const ids=allIds.filter(id=>!presentById.get(target.id).has(id));
@@ -743,6 +747,7 @@ $('delete-playlist-confirm').onclick=async()=>{
   }catch(error){$('delete-playlist-status').textContent=error.message+' Deletion could not be verified. Close this message and reopen Manage playlists to refresh before trying again.';}
   finally{$('delete-playlist-cancel').disabled=false;}
  });
+ if(!deleteTarget)document.dispatchEvent(new CustomEvent('playlist-deleted',{detail:{id:target.id}}));
  renderPlaylistPicker();
 };
 $('move').onclick=()=>openMove();$('move-cancel').onclick=()=>$('move-dialog').close();$('move-target').onchange=updateMoveForm;$('move-confirm').onclick=performMove;
@@ -824,7 +829,7 @@ async function restore(historyIds) {
    if(stopped)break;
    message(`Checking ${entries[0].sourceTitle||'Watch Later'} before restoring…`);
    const present=await readDestination(id,'checking restore destination');
-   for(const h of entries)if(present.has(h.video.videoId)){h.restoredAt=Date.now();historySelected.delete(h.historyId);}
+   for(const h of entries)if(present.has(h.video.videoId)){h.restoredAt=Date.now();const current=state.history.find(item=>item.historyId===h.historyId);if(current)current.restoredAt=h.restoredAt;historySelected.delete(h.historyId);}
    const missing=[...new Set(entries.filter(h=>!h.restoredAt).map(h=>h.video.videoId))];
    if(present.size+missing.length>5000)throw new Error('Not enough playlist space. Select fewer entries to restore.');
    await save();
@@ -835,7 +840,8 @@ async function restore(historyIds) {
     const result=await call('restore',{playlistId:id,ids});confirmRemoval(result.data);
     const check=await verifyDestinationVideos({ids,read:()=>readDestination(id,'verifying restored videos'),stopped:()=>stopped});
     if(check.missing.length)throw new Error('Some restored videos are not visible yet. Checking automatically before another restore.');
-    for(const h of batch){h.restoredAt=Date.now();historySelected.delete(h.historyId);}
+    const restoredIds=new Set(batch.map(h=>h.historyId));
+    for(const h of state.history)if(restoredIds.has(h.historyId)){h.restoredAt=Date.now();historySelected.delete(h.historyId);}
     state.pending=null;if(id===sourceId)state.complete=false;await save();restored+=ids.length;
    }
   }

@@ -96,3 +96,11 @@ test('malformed quotes and unfinished operators match nothing', () => {
   const videos=[{title:'The Race',channel:'The Race'}];
   for(const query of ['"the race','""','channel:','the OR','OR the','"the"race']) assert.equal(filterEntries(videos,query).length,0,query);
 });
+
+
+test('history merge keeps newer restores and recovered details across stale workspaces',async()=>{
+ const {mergeRemovalHistory}=await import('../core.js');
+ const stored=[{historyId:'a',removedAt:10,restoredAt:20,video:{title:'Recovered',recovered:{source:'archive'}}},{historyId:'b',removedAt:30,video:{title:'Newer'}}];
+ const merged=mergeRemovalHistory(stored,[{historyId:'a',removedAt:10,restoredAt:null,video:{title:'Unavailable video'}}]);
+ assert.equal(merged.length,2);assert.equal(merged[0].historyId,'b');assert.equal(merged[1].restoredAt,20);assert.equal(merged[1].video.title,'Recovered');
+});

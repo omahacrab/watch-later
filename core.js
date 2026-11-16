@@ -156,3 +156,15 @@ export function confirmRemoval(result) {
     throw new Error('YouTube did not confirm this batch. Refresh the playlist before trying again.');
   }
 }
+
+// A stale workspace must not erase newer history or an already-confirmed restore.
+export function mergeRemovalHistory(stored = [], current = []) {
+  const entries = new Map();
+  for (const entry of [...stored, ...current]) {
+    const old = entries.get(entry.historyId);
+    const restoredAt = Math.max(old?.restoredAt || 0, entry.restoredAt || 0) || null;
+    const video = old?.video?.recovered && !entry.video?.recovered ? old.video : entry.video;
+    entries.set(entry.historyId, {...old, ...entry, video, restoredAt});
+  }
+  return [...entries.values()].sort((a,b)=>b.removedAt-a.removedAt);
+}

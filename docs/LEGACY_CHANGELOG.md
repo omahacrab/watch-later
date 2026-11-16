@@ -1,3 +1,5 @@
+> Archived v0.1.29 documentation. Some instructions describe older behaviour. See the root README for v0.2.0.
+
 # Watch Later Cleaner
 
 Search your YouTube Watch Later playlist and remove reviewed selections in batches of **500**.

@@ -29,8 +29,9 @@ export function initWorkspace(api){
   if(owner)sourceCache.set(s.sourceId,s.state);
   $('back-playlists').hidden=s.sourceId==='WL';
   for(const id of ['playlists-refresh','playlist-create'])$(id).disabled=!ready();
-  root.querySelectorAll('[data-requires-account]').forEach(b=>b.disabled=!ready());
-  dialog.querySelectorAll('[data-requires-account]').forEach(b=>b.disabled=!ready());
+  $('playlist-cards').querySelectorAll('[data-requires-account]').forEach(b=>b.disabled=!ready()||b.hasAttribute('data-blocked'));
+  root.querySelectorAll('[data-requires-account]').forEach(b=>b.disabled=!ready()||b.hasAttribute('data-blocked'));
+  dialog.querySelectorAll('[data-requires-account]').forEach(b=>b.disabled=!ready()||b.hasAttribute('data-blocked'));
  }
  async function hydrate(){
   if(hydrating)return;hydrating=true;
@@ -79,12 +80,20 @@ export function initWorkspace(api){
  $('playlists-refresh').onclick=refreshPlaylists;$('playlist-search').oninput=renderPlaylists;
  $('playlist-create').onclick=async()=>{if(!ready())return;await api.openMove([],true);$('move-new').click();};
  async function openPlaylist(id){if(!ready())return;const p=options().find(p=>p.id===id);if(!p)return;if(!await api.switchPlaylist(id,p.title))return;setView('watch');if(!api.get().state.complete)await api.exclusive(api.scan);sourceCache.set(id,api.get().state);discover();await saveLibrary();}
- let knownBeforeMove=[];
+
  $('move-dialog').addEventListener('close',()=>{void (async()=>{
   // The move picker excludes the source, so retain it when syncing the index.
   const incoming=api.listDestinations().filter(p=>p.id!=='WL');if(incoming.length){const source=playlistList.find(p=>p.id===api.get().sourceId);playlistList=[...new Map([...(source?[source]:[]),...incoming].map(p=>[p.id,p])).values()];await savePlaylists();renderPlaylists();}
  })();});
- $('delete-playlist-dialog').addEventListener('close',()=>{void(async()=>{if(!$('delete-playlist-status').textContent.startsWith('Deleting'))return;const ids=new Set(api.listDestinations().map(p=>p.id));playlistList=playlistList.filter(p=>ids.has(p.id));await savePlaylists();renderPlaylists();})();});
+ document.addEventListener('playlist-deleted',event=>{void(async()=>{
+  const id=event.detail.id;playlistList=playlistList.filter(p=>p.id!==id);sourceCache.delete(id);feedPlaylists=feedPlaylists.filter(p=>p!==id);sourceChoices=sourceChoices.filter(p=>p!==id);
+  await chrome.storage.local.remove(key(owner,id));await savePlaylists();if(api.get().sourceId===id){await api.switchPlaylist('WL','Watch Later');setView('playlists');}renderPlaylists();renderFeeds();
+ })().catch(e=>api.message(e.message,true));});
+ document.addEventListener('playlist-created',event=>{const p=event.detail;playlistList=[p,...playlistList.filter(x=>x.id!==p.id)];void savePlaylists();renderPlaylists();});
+ document.addEventListener('playlist-mutated',event=>{
+  const id=event.detail.id,playlist=playlistList.find(p=>p.id===id),cached=sourceCache.get(id);if(playlist)playlist.videoCount=null;if(cached&&id!==api.get().sourceId){cached.complete=false;if(cached.youtubeCount)cached.youtubeCount.stale=true;}
+  renderPlaylists();
+ });
  async function readPlaylist(id){
   if(id===api.get().sourceId){await api.scan();const result=api.get().state;if(!result.complete)throw new Error('Playlist loading was stopped. Partial data is saved.');sourceCache.set(id,result);return result;}
   const stored=(await chrome.storage.local.get(key(owner,id)))[key(owner,id)]||{};
@@ -155,7 +164,7 @@ export function initWorkspace(api){
  async function browseChannel(id,load=false){const channel=getChannel(id);if(!channel)return;dialogChannel=id;
   if(load&&ready())await api.exclusive(async()=>{api.message(`Reading ${channel.name} uploads…`);await fetchUploads(channel);});
   const saved=categoryVideos(allSaved(),[{...channel,added:true}],[],{all:true}),uploads=uploadCache.get(id)?.videos||[];
-  modal(channel.name,`<p>${saved.length} saved videos · ${channelIdValid(id)?`<a href="https://www.youtube.com/channel/${esc(id)}" target="_blank" rel="noopener noreferrer">Open channel ↗</a>`:'Search YouTube to link this older cached channel to a channel ID.'}</p><div class="feed-toolbar">${btn('channel-saved','Saved videos',`class="${dialogSaved?'active':''}"`)}${btn('channel-uploads','Recent uploads',`class="${!dialogSaved?'active':''}"`)}${btn('load-channel-uploads','Load uploads',`data-requires-account ${channelIdValid(id)?'':'disabled'}`)}</div><div class="dialog-list feed-list">${(dialogSaved?saved:uploads).map(videoMarkup).join('')||'<div class="empty">No videos loaded in this view.</div>'}</div>`);
+  modal(channel.name,`<p>${saved.length} saved videos · ${channelIdValid(id)?`<a href="https://www.youtube.com/channel/${esc(id)}" target="_blank" rel="noopener noreferrer">Open channel ↗</a>`:'Search YouTube to link this older cached channel to a channel ID.'}</p><div class="feed-toolbar">${btn('channel-saved','Saved videos',`class="${dialogSaved?'active':''}"`)}${btn('channel-uploads','Recent uploads',`class="${!dialogSaved?'active':''}"`)}${btn('load-channel-uploads','Load uploads',`data-requires-account ${channelIdValid(id)?'':'disabled data-blocked'}`)}</div><div class="dialog-list feed-list">${(dialogSaved?saved:uploads).map(videoMarkup).join('')||'<div class="empty">No videos loaded in this view.</div>'}</div>`);
  }
  async function saveVideo(id){if(!ready()||!/^[\w-]{11}$/.test(id))return;await api.exclusive(async()=>{
   api.message('Checking Watch Later before saving…');const present=await api.readDestination('WL','checking Watch Later');if(present.has(id)){api.message('This video is already in Watch Later.');return;}if(present.size>=5000)throw new Error('Watch Later is full. Remove some videos first.');
@@ -211,7 +220,7 @@ export function initWorkspace(api){
   if(action==='delete-feed'){if(confirm('Delete this saved feed? Channels and playlists will be kept.')){library.feeds=library.feeds.filter(f=>f.id!==feedId);detach();await saveLibrary();}}
   if(action==='manage-categories'){manageCategories();return;}
   if(action==='rename-category'){const c=library.categories.find(c=>c.id===id);modal('Rename category',`<form data-form="rename-category" data-id="${esc(id)}"><label class="dialog-field">Name<input name="name" value="${esc(c.name)}" maxlength="100" required autocomplete="off"></label><button type="submit" class="primary">Save name</button></form>`);return;}
-  if(action==='delete-category'){if(confirm('Delete this category? Channels stay in My feeds. Saved feeds lose this category.')){library=removeCategory(library,id);cats=cats.filter(x=>x!==id);if(!cats.length)all=true;await saveLibrary();manageCategories();}}
+  if(action==='delete-category'){if(confirm('Delete this category? Channels stay in My feeds. Saved feeds lose this category.')){library=removeCategory(library,id);cats=cats.filter(x=>x!==id);if(!cats.length)all=true;detach();await saveLibrary();manageCategories();}}
   if(action==='view-category-channels'){section='channels';channelMode='library';channelCategory=id;channelQuery='';dialog.close();}
   if(action==='categorise-channel'){categorise([id]);return;}if(action==='categorise-selected'){categorise([...channelSelected]);return;}
   if(action==='select-channels')root.querySelectorAll('[data-channel-check]').forEach(c=>channelSelected.add(c.dataset.channelCheck));

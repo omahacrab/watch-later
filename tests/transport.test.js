@@ -52,8 +52,15 @@ test('session transport: fixed endpoint, account checks, max 500 and explicit fa
     assert.equal((await youtubeRequest('delete-playlist',{playlistId:'PL_DELETE'})).ok,false);
     assert.equal((await youtubeRequest('delete-playlist',{account:'other',playlistId:'PL_DELETE'})).ok,false);
     assert.equal(sent.length,beforeDeleteInvalid);
+    await youtubeRequest('add-to-playlist',{account:identity.account,playlistId:'WL',ids:['sample']});
+    assert.equal(JSON.parse(sent.at(-1).options.body).playlistId,'WL');
+    await youtubeRequest('channel-search',{account:identity.account,query:'The Race'});
+    assert.equal(sent.at(-1).url,'/youtubei/v1/search?prettyPrint=false');
+    assert.equal(JSON.parse(sent.at(-1).options.body).query,'The Race');
+    await youtubeRequest('channel-browse',{account:identity.account,channelId:'UC'+'a'.repeat(22),params:'returned-command'});
+    assert.equal(JSON.parse(sent.at(-1).options.body).params,'returned-command');
     const beforeInvalid=sent.length;
-    assert.equal((await youtubeRequest('add-to-playlist',{account:identity.account,playlistId:'WL',ids:['sample']})).ok,false);
+    assert.equal((await youtubeRequest('add-to-playlist',{account:identity.account,playlistId:'LL',ids:['sample']})).ok,false);
     assert.equal(sent.length,beforeInvalid);
     globalThis.fetch = async()=>({ok:false,status:429});
     assert.match((await youtubeRequest('browse',{account:identity.account})).error,/HTTP 429/);
