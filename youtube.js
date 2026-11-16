@@ -18,11 +18,11 @@ export async function youtubeRequest(operation, payload = {}) {
       return {ok: true, account, pageCountText};
     }
     if(operation==='page-data'){
-      if(location.pathname!=='/playlist' || new URL(location.href).searchParams.get('list')!=='WL')return {ok:true,account,data:{}};
+      if(location.pathname!=='/playlist' || new URL(location.href).searchParams.get('list')!==(payload.playlistId||'WL'))return {ok:true,account,data:{}};
       const page = document.querySelector('ytd-browse[page-subtype="playlist"]');
       return {ok:true,account,data:page?.data || {}};
     }
-    if (!['browse', 'remove', 'restore', 'playlists', 'create-playlist', 'add-to-playlist', 'delete-playlist'].includes(operation)) throw new Error('Unknown operation.');
+    if (!['browse', 'remove', 'restore', 'playlists', 'create-playlist', 'add-to-playlist', 'delete-playlist', 'channel-search', 'channel-browse'].includes(operation)) throw new Error('Unknown operation.');
     const cookies = Object.fromEntries(document.cookie.split(';').map(s => {
       const index = s.indexOf('=');
       return [s.slice(0, index).trim(), s.slice(index + 1)];
@@ -42,7 +42,14 @@ export async function youtubeRequest(operation, payload = {}) {
     if (get('DELEGATED_SESSION_ID')) headers['X-Goog-PageId'] = get('DELEGATED_SESSION_ID');
     const body = {context: structuredClone(context)};
     let endpoint = 'browse';
-    if (operation === 'playlists') {
+    if (operation === 'channel-search') {
+      endpoint='search';
+      if(payload.token)body.continuation=payload.token;
+      else {if(typeof payload.query!=='string'||!payload.query.trim())throw new Error('Enter a channel name.');body.query=payload.query.trim();body.params='EgIQAg==';}
+    } else if(operation==='channel-browse') {
+      if(payload.token)body.continuation=payload.token;
+      else {if(!/^UC[a-zA-Z0-9_-]{22}$/.test(payload.channelId||''))throw new Error('Search YouTube to resolve this channel ID.');body.browseId=payload.channelId;if(payload.params)body.params=payload.params;}
+    } else if (operation === 'playlists') {
       endpoint='playlist/get_add_to_playlist';
       if(typeof payload.videoId!=='string'||!payload.videoId.trim())throw new Error('An available video is required to load editable playlists.');
       body.videoIds = [payload.videoId];
@@ -59,13 +66,14 @@ export async function youtubeRequest(operation, payload = {}) {
         const playlist=payload.playlistId || 'WL';
         if(!/^[a-zA-Z0-9_-]+$/.test(playlist))throw new Error('Invalid playlist ID.');
         body.browseId = `VL${playlist}`;
-        if(typeof payload.params==='string' && playlist==='WL')body.params=payload.params;
+        if(typeof payload.params==='string' && playlist)body.params=payload.params;
       }
     } else {
       if (!payload.account || !Array.isArray(payload.ids) || payload.ids.length < 1 || payload.ids.length > 500 || payload.ids.some(id => typeof id !== 'string' || !id)) throw new Error('Invalid removal selection.');
       endpoint = 'browse/edit_playlist';
-      body.playlistId = operation === 'add-to-playlist' ? payload.playlistId : 'WL';
-      if(operation === 'add-to-playlist' && (typeof body.playlistId!=='string' || !/^[a-zA-Z0-9_-]+$/.test(body.playlistId) || ['WL','LL'].includes(body.playlistId)))throw new Error('Choose a destination playlist.');
+      body.playlistId = payload.playlistId || 'WL';
+      if(!/^(?:WL|PL[a-zA-Z0-9_-]+)$/.test(body.playlistId))throw new Error('Only Watch Later and regular editable playlists can be changed.');
+      if(operation === 'add-to-playlist' && (typeof body.playlistId!=='string' || !/^[a-zA-Z0-9_-]+$/.test(body.playlistId) || body.playlistId==='LL'))throw new Error('Choose a destination playlist.');
       body.actions = ['restore','add-to-playlist'].includes(operation)
         ? [...new Set(payload.ids)].map(addedVideoId => ({addedVideoId, action: 'ACTION_ADD_VIDEO'}))
         : [...new Set(payload.ids)].map(setVideoId => ({setVideoId, action: 'ACTION_REMOVE_VIDEO'}));

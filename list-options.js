@@ -1,10 +1,10 @@
 const text = v => typeof v==='string'?v:v?.simpleText||(v?.runs||[]).map(r=>r.text||'').join('')||'';
-export function playlistOptions(data) {
+export function playlistOptions(data,playlistId='WL') {
  const sorts=[];let unavailable=null,alreadyShown=false,activeSort=null;
  function endpoint(value){
   if(!value||typeof value!=='object')return null;
   const b=value.browseEndpoint;
-  if(b && (!b.browseId||b.browseId==='VLWL') && typeof b.params==='string')return {params:b.params};
+  if(b && (!b.browseId||b.browseId===`VL${playlistId}`) && typeof b.params==='string')return {params:b.params};
   if(typeof value.continuationCommand?.token==='string')return {token:value.continuationCommand.token};
   for(const child of Object.values(value)){const found=endpoint(child);if(found)return found;}
   return null;

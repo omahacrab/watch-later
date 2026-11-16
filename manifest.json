@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Watch Later Cleaner",
-  "version": "0.1.29",
-  "description": "Search your Watch Later playlist, review selections, and remove videos in batches of 500.",
+  "name": "Watch Later: YouTube Playlists & Feeds",
+  "version": "0.2.0",
+  "description": "Search, move and copy playlist videos. Restore removals and build feeds from channels and categories.",
   "minimum_chrome_version": "120",
   "permissions": [
     "scripting",
@@ -12,7 +12,7 @@
     "https://www.youtube.com/*"
   ],
   "action": {
-    "default_title": "Open Watch Later Cleaner",
+    "default_title": "Open Watch Later: YouTube Playlists & Feeds",
     "default_icon": {
       "16": "icon-16.png",
       "32": "icon-32.png"
@@ -30,5 +30,8 @@
   },
   "optional_host_permissions": [
     "https://web.archive.org/*"
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'self'"
+  }
 }

@@ -1,1 +1,18 @@
-{"private":true,"type":"module","scripts":{"test":"node --test tests/*.test.js"}}
+{
+  "name": "watch-later",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node scripts/check.mjs",
+    "package": "python3 scripts/package.py"
+  },
+  "devDependencies": {
+    "linkedom": "0.18.12"
+  }
+}

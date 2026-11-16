@@ -1,3 +1,4 @@
+import {initWorkspace} from './workspace.js';
 import {recoverDetails,applyRecovered,recoverHistoryDetails} from './recovery.js';
 import {firstResultScrollTarget} from './scroll-position.js';
 import {playlistOptions,sortVideos} from './list-options.js';
@@ -9,6 +10,7 @@ import {extractPlaylistTotal, capacity} from './counts.js';
 import {BATCH_SIZE, parsePlaylist, mergeEntries, filterEntries, parseSearch, batches, confirmRemoval} from './core.js';
 import {youtubeRequest} from './youtube.js';
 const $ = id => document.getElementById(id);
+let sourceId='WL',sourceTitle='Watch Later',searchPaused=false,transferMode='move',preferredTabId=null,recentRemovalIds=[];
 let tabId, account, state = {videos: [], complete: false, updated: null, pending: null};
 let selected = new Set(), page = 0, busy = false, stopped = false, connecting = false;
 let channelFilter = null;
@@ -23,7 +25,7 @@ const playlistCountLabels=new Map();
 let managingPlaylists=false,deleteTarget=null;
 let selectionAnchor = null, historyPage = 0;
 const historySelected = new Set();
-const PAGE_SIZE = 500;
+const PAGE_SIZE = 100;
 function recordTotal(value, source) {
   if (value === null) return false;
   state.youtubeCount = {value, checkedAt: Date.now(), source, stale: false};
@@ -39,20 +41,24 @@ async function refreshTotal() {
   }
   await save(); render();
 }
-const storageKey = () => `playlist:${account}`;
+const storageKey = () => sourceId==='WL'?`playlist:${account}`:`playlist:${account}:${sourceId}`;
 function message(text, error = false) { $('status').textContent = text; $('status').classList.toggle('error', error); }
-async function save() { state.history=recoverHistoryDetails(state.history,state.recoveredMetadata); await chrome.storage.local.set({[storageKey()]: state}); }
+async function save() { state.history=recoverHistoryDetails(state.history,state.recoveredMetadata); await chrome.storage.local.set({[storageKey()]: state,[`history:${account}`]:state.history||[]}); }
 async function call(operation, payload = {}) {
   if (!tabId) throw new Error('Connect to YouTube first.');
-  const results = await chrome.scripting.executeScript({target: {tabId}, world: 'MAIN', func: youtubeRequest, args: [operation, {...payload, ...(account ? {account} : {})}]});
+  const results = await chrome.scripting.executeScript({target: {tabId}, world: 'MAIN', func: youtubeRequest, args: [operation, {playlistId:sourceId,...payload, ...(account ? {account} : {})}]});
   const result = results[0]?.result;
   if (!result?.ok) throw new Error(result?.error || 'YouTube tab is unavailable. Reconnect.');
+  if(['add-to-playlist','restore'].includes(operation)&&result.data?.status==='STATUS_SUCCEEDED'){
+    const id=payload.playlistId||sourceId;
+    if(id!==sourceId){const key=id==='WL'?`playlist:${account}`:`playlist:${account}:${id}`;const cached=(await chrome.storage.local.get(key))[key];if(cached){cached.complete=false;if(cached.youtubeCount)cached.youtubeCount.stale=true;await chrome.storage.local.set({[key]:cached});}}
+  }
   return result;
 }
 function matchingUnsorted() {
  const index=channelIndex(state.videos);
- const scope=state.videos.filter(v=>(channelFilter===null || sharesChannel(v,channelFilter,index)) && watchMatches(v,$('watch-filter').value));
- const terms=[...searchPills,$('watch-later-cleaner-search').value.trim()].filter(Boolean);
+ const scope=state.videos.filter(v=>(channelFilter===null || sharesChannel(v,channelFilter,index)) && ($('watch-filter').value==='range'?typeof v.watchedPercent==='number'&&v.watchedPercent>=Number($('played-min').value)&&v.watchedPercent<=Number($('played-max').value):watchMatches(v,$('watch-filter').value)));
+ const terms=searchPaused?[]:[...searchPills,$('watch-later-cleaner-search').value.trim()].filter(Boolean);
  if(!terms.length)return filterEntries(scope,'',$('field').value,$('unavailable').checked);
  if(terms.some(t=>parseSearch(t).error))return [];
  const keys=new Set(terms.flatMap(term=>filterEntries(scope,term,$('field').value,$('unavailable').checked)).map(v=>v.key));
@@ -76,12 +82,20 @@ function render() {
   const allRecoveryItems=recoveryCandidates(true);
   $('recover-all-details').textContent=`Recover all unavailable (${allRecoveryItems.length})`;
   $('recover-all-details').disabled=busy||connecting||!account||!allRecoveryItems.length;
-  $('recover-details').textContent=`Recover selected (${recoveryItems.length})`;
+  $('recover-details').textContent="Recover 'unavailable' info";
+  $('recover-details').hidden=!state.videos.some(v=>v.unavailable&&selected.has(v.key));
+  $('recover-all-details').hidden=true;
+  $('played-range').hidden=$('watch-filter').value!=='range';
+  $('current-playlist-title').textContent=sourceTitle;
+  document.querySelector('.capacity-card').hidden=sourceId!=='WL';
+  document.dispatchEvent(new Event('workspace-state'));
   $('recover-details').disabled=busy||connecting||!account||!recoveryItems.length;
   renderPills();
   $('sort').disabled=busy||connecting;
   $('clear-search').disabled=busy; $('search-again').disabled=busy;
   renderHistory();
+  $('undo-last').hidden=!recentRemovalIds.some(id=>(state.history||[]).some(h=>h.historyId===id&&!h.restoredAt));
+  $('undo-last').disabled=busy||!!state.pending;
   renderSelected();
   $('channel-scope').hidden = channelFilter === null;
   $('channel-scope-label').textContent = channelFilter === null ? '' : `${channelFilter.length > 1 ? 'Channels' : 'Channel'}: ${channelFilter.map(c => c.name).join(' · ')}`;
@@ -94,8 +108,8 @@ function render() {
   $('count-status').textContent = !count ? 'YouTube total not read yet' : `${count.stale ? 'Last known count; refresh needed' : count.source === 'YouTube page' ? 'Read from the open YouTube page' : 'Checked with YouTube'} · ${new Date(count.checkedAt).toLocaleTimeString()}`;
   $('refresh-count').disabled = busy || connecting || !account;
   const matches = matching();
-  const searchError = [...searchPills,$('watch-later-cleaner-search').value].map(t=>parseSearch(t).error).find(Boolean);
-  $('search-help').textContent = searchError || 'Comma or Enter creates a pill. Pills match ANY. Quotes keep commas inside phrases. Title/channel selector applies to all pills; title: and channel: override it.';
+  const searchError = searchPaused?null:[...searchPills,$('watch-later-cleaner-search').value].map(t=>parseSearch(t).error).find(Boolean);
+  $('search-help').textContent = searchError || 'Comma saves an OR pill and shows all videos until you type again. Enter applies pills. Quotes keep commas inside phrases. Title/channel selector applies to all pills; title: and channel: override it.';
   $('watch-later-cleaner-search').setAttribute('aria-invalid', String(!!searchError));
   const pages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
   page = Math.min(page, pages - 1);
@@ -169,7 +183,7 @@ function render() {
     allFromChannel.setAttribute('aria-label', `${allFromChannel.textContent}: ${rowChannels.map(c => c.name).join(', ') || 'unavailable'}`);
     allFromChannel.onclick = () => {
       selectionAnchor = null; channelFilter = rowChannels;
-      searchPills=[]; $('watch-filter').value='all';
+      searchPills=[];searchPaused=false; $('watch-filter').value='all';
       $('watch-later-cleaner-search').value = '';
       $('field').value = 'both'; $('unavailable').checked = false;
       page = 0; render();
@@ -187,7 +201,7 @@ function render() {
     const rowActions = document.createElement('div'); rowActions.className = 'row-actions';
     const removeOne = document.createElement('button'); removeOne.textContent = 'Remove'; removeOne.className = 'danger row-remove';
     removeOne.disabled = busy || !state.complete || !!state.pending || !video.setVideoId;
-    removeOne.setAttribute('aria-label', `Remove ${video.title} from Watch Later`);
+    removeOne.setAttribute('aria-label', `Remove ${video.title} from ${sourceTitle}`);
     removeOne.onclick = () => remove([video]);
     const moveOne=document.createElement('button');moveOne.textContent='Move…';moveOne.className='row-remove';moveOne.disabled=removeOne.disabled || !video.videoId;moveOne.onclick=()=>openMove([video]);
     rowActions.append(duration, moveOne, removeOne);
@@ -269,12 +283,14 @@ async function connect() {
   render();
   try {
     const tabs = await chrome.tabs.query({url: 'https://www.youtube.com/*'});
-    const tab = tabs.find(t => t.active && new URL(t.url).searchParams.get('list') === 'WL') || tabs.find(t => new URL(t.url).searchParams.get('list') === 'WL') || tabs[0];
+    const tab = tabs.find(t=>t.id===preferredTabId) || tabs.find(t => t.active && new URL(t.url).searchParams.get('list') === 'WL') || tabs.find(t => new URL(t.url).searchParams.get('list') === 'WL') || tabs[0];
     if (!tab) throw new Error('Click Open Watch Later, sign in if needed, then return here and connect.');
-    tabId = tab.id; account = null;
+    tabId = tab.id; account = null; sourceId='WL';sourceTitle='Watch Later';recentRemovalIds=[];
     const identity = await call('identity');
     account = identity.account;
     state = (await chrome.storage.local.get(storageKey()))[storageKey()] || {videos: [], complete: false, updated: null, pending: null};
+    const historyData=await chrome.storage.local.get(`history:${account}`);
+    state.history=historyData[`history:${account}`]||state.history||[];
     const pageTotal = extractPlaylistTotal({}, identity.pageCountText || '');
     if (!state.youtubeCount && pageTotal !== null) recordTotal(pageTotal, 'YouTube page');
     await refreshTotal();
@@ -313,10 +329,15 @@ async function exclusive(task) {
 
 async function recoverPending(){
  if(!state.pending)return;
+ if(state.pending.kind==='restore'){
+  const pending=state.pending;stopped=false;const present=await readDestination(pending.playlistId||sourceId,'reconciling restore');
+  for(const h of state.history||[])if(pending.historyIds.includes(h.historyId)&&present.has(h.video.videoId))h.restoredAt=Date.now();
+  state.pending=null;await save();await scan();return;
+ }
  if(state.pending.kind==='move'&&state.pending.phase==='adding'){
   // This phase is saved before copying; no Watch Later removal has been sent.
   state.pending=null;await save();
-  message('Recovered interrupted copy. Watch Later was not changed. Existing destination copies will be checked before another move.');
+  message('Recovered interrupted copy. The source playlist was not changed. Existing destination copies will be checked before another move.');
   return;
  }
  const keep=new Set(selected);
@@ -337,9 +358,9 @@ async function scan() {
     state = {videos: [], complete: false, updated: Date.now(), pending: previousPending, parserVersion: 2, channelMetadataVersion: 1, scanDiagnostics: [], youtubeCount, history,recoveredMetadata,recoveryAttempts};
     selected.clear(); selectionAnchor = null; await save();
     let initial = await call('browse', nativeSort || {});
-    let options=playlistOptions(initial.data);let usedExpandedPage=false;
+    let options=playlistOptions(initial.data,sourceId);let usedExpandedPage=false;
     {
-      try{const pageData=await call('page-data');const pageOptions=playlistOptions(pageData.data);state.youtubeTabSort=pageOptions.activeSort;if(pageOptions.alreadyShown && !options.unavailable && !nativeSort){initial=pageData;usedExpandedPage=true;}options={sorts:options.sorts.length?options.sorts:pageOptions.sorts,unavailable:options.unavailable||pageOptions.unavailable,alreadyShown:options.alreadyShown||pageOptions.alreadyShown};}catch{}
+      try{const pageData=await call('page-data');const pageOptions=playlistOptions(pageData.data,sourceId);state.youtubeTabSort=pageOptions.activeSort;if(pageOptions.alreadyShown && !options.unavailable && !nativeSort){initial=pageData;usedExpandedPage=true;}options={sorts:options.sorts.length?options.sorts:pageOptions.sorts,unavailable:options.unavailable||pageOptions.unavailable,alreadyShown:options.alreadyShown||pageOptions.alreadyShown};}catch{}
     }
     state.listOptions=options;updateSortOptions();
     state.unavailableRequested=usedExpandedPage;
@@ -347,12 +368,12 @@ async function scan() {
       initial=await call('browse',options.unavailable);state.unavailableRequested=true;
       // Recover the chosen native sort from the expanded response, when offered.
       if(nativeSort?.title){
-        const expanded=playlistOptions(initial.data).sorts.find(s=>s.title===nativeSort.title);
+        const expanded=playlistOptions(initial.data,sourceId).sorts.find(s=>s.title===nativeSort.title);
         if(expanded)initial=await call('browse',expanded.command);
         else {nativeSort=null;$('sort').value='original';}
       }
     }
-    state.loadedSort=playlistOptions(initial.data).activeSort || null;
+    state.loadedSort=playlistOptions(initial.data,sourceId).activeSort || null;
     updateSortOptions();
     const visited = new Set(); let token = null; let first = true;
     do {
@@ -361,7 +382,7 @@ async function scan() {
       if (first) {
         if (!recordTotal(extractPlaylistTotal(result.data), 'YouTube response') && state.youtubeCount) state.youtubeCount.stale = true;
       }
-      const parsed = parsePlaylist(result.data, first);
+      const parsed = first&&emptyDestination(result.data)?parsePlaylist({playlistVideoListRenderer:{contents:[]}},true):parsePlaylist(result.data, first);
       state.scanDiagnostics.push(parsed.diagnostic);
       if (parsed.expectedTotal !== null) state.expectedTotal = parsed.expectedTotal;
       const before = state.videos.length;
@@ -414,7 +435,7 @@ $('sort').onchange=async()=>{
  render();
 };
 function clearSearch(){
- searchPills=[];channelFilter=null;selectionAnchor=null;page=0;
+ searchPills=[];searchPaused=false;channelFilter=null;selectionAnchor=null;page=0;
  $('watch-later-cleaner-search').value='';$('unavailable').checked=false;$('watch-filter').value='all';
  $('search-again').hidden=true;render();
  $('watch-later-cleaner-search').focus?.({preventScroll:true});
@@ -423,13 +444,14 @@ $('clear-search').onclick=clearSearch;$('search-again').onclick=clearSearch;
 function review() {
   const items = state.videos.filter(v => selected.has(v.key));
   if (!items.length || busy || !state.complete || state.pending) return;
+  $('review').querySelector('h2').textContent=`Remove from ${sourceTitle}?`;
   $('review-count').textContent = `${items.length} videos selected. Up to ${BATCH_SIZE} removals per request.`;
   $('review-list').replaceChildren(...items.map(v => { const li = document.createElement('li'); li.textContent = v.title; return li; }));
   $('review').showModal();
 }
 
 async function remove(items = null) {
-  let completedCount = 0, completed = false;
+  let completedCount = 0, completed = false;recentRemovalIds=[];
   $('review').close();
   if (!state.complete || state.pending) return;
   const queue = batches(items || state.videos.filter(v => selected.has(v.key)));
@@ -482,7 +504,7 @@ async function fetchEditablePlaylists(){
 }
 async function openMove(items,manage=false) {
  if(busy || !account || (!manage&&(state.pending || !state.complete)))return;
- managingPlaylists=manage;
+ managingPlaylists=manage;transferMode='move';
  const countGeneration=++playlistCountGeneration;
  moveItems=manage?[]:items || state.videos.filter(v=>selected.has(v.key));
  if(!manage&&(!moveItems.length || moveItems.some(v=>!v.videoId || !v.setVideoId))){message('Every selected video needs a video ID and removal ID to move.',true);return;}
@@ -494,11 +516,12 @@ async function openMove(items,manage=false) {
  $('move-create-only').disabled=true; $('move-confirm').disabled=true; $('move-search').value=''; $('move-name').value=''; $('move-playlists').replaceChildren(); $('move-new').disabled=true; $('move-existing').disabled=true; $('move-dialog').showModal();
  try {
   const result=await fetchEditablePlaylists();
-  destinations=editablePlaylists(result.data);
+  destinations=editablePlaylists(result.data).filter(p=>manage||p.id!==sourceId);
+  if(!manage&&sourceId!=='WL')destinations.unshift({id:'WL',title:'Watch Later'});
   moveDestinationIds=new Set();
   updateDestinationOptions();
   $('move-target').value=destinations[0]?.id || 'new';updateMoveForm();
-  $('move-status').textContent=manage?'Create a playlist or delete one below.':`${moveItems.length} videos. Add to destination, verify they are there, then remove from Watch Later.`;
+  $('move-status').textContent=manage?'Create a playlist or delete one below.':`${moveItems.length} videos. Add to destination, verify they are there, then remove from ${sourceTitle}.`;
   $('move-create-only').disabled=false; $('move-new').disabled=false; $('move-existing').disabled=!destinations.length;
   void loadPlaylistCounts(countGeneration,account);
  } catch(error){
@@ -564,8 +587,11 @@ function updateMoveForm(){
  $('move-create-only').hidden=!create;
  $('move-name-wrap').hidden=!create; $('move-existing-wrap').hidden=create;
  $('move-new').setAttribute('aria-pressed',String(create));$('move-existing').setAttribute('aria-pressed',String(!create));
- $('move-confirm').textContent=create?'Create playlist & move videos':'Move videos';
- $('move-destination-count').textContent=`${moveDestinationIds.size} playlists selected. Videos will be copied to every selected playlist before removal from Watch Later.`;
+ $('move-confirm').textContent=create?`Create playlist & ${transferMode} videos`:`${transferMode==='copy'?'Copy':'Move'} ${moveItems.length} ${moveItems.length===1?'video':'videos'}`;
+ $('transfer-toggle').hidden=managingPlaylists;$('transfer-menu').hidden=true;
+ $('transfer-toggle').setAttribute('aria-expanded','false');
+ $('move-explanation').textContent=transferMode==='copy'?`Videos stay in ${sourceTitle}. Copies are checked in every destination.`:`Videos are removed from ${sourceTitle} only after every destination is verified. Moves are recorded in history.`;
+ $('move-destination-count').textContent=`${moveDestinationIds.size} playlists selected. Videos will be copied to every selected playlist ${transferMode==='copy'?`and kept in ${sourceTitle}`:`before removal from ${sourceTitle}`}.`;
  $('move-confirm').disabled=!create&&!moveDestinationIds.size;
  renderPlaylistPicker();
 }
@@ -582,7 +608,7 @@ async function readDestination(id,stage='reading destination'){
    parsed=first&&emptyDestination(result.data)?parsePlaylist({playlistVideoListRenderer:{contents:[]}},true):parsePlaylist(result.data,first);
   }catch(error){
    state.lastMoveDiagnostic={stage,page:visited.size+1,structure:playlistStructure(result.data)};await save();
-   throw new Error(`Could not read destination while ${stage}: ${error.message} This batch stays in Watch Later. Export list includes a format diagnostic.`);
+   throw new Error(`Could not read destination while ${stage}: ${error.message} This batch stays in its source playlist. Export list includes a format diagnostic.`);
   }
   if(parsed.suspiciousEnd)throw new Error('Could not fully read destination playlist. Source videos were kept.');
   items.push(...parsed.videos);token=parsed.token;first=false;
@@ -632,11 +658,11 @@ async function performMove(){
  const chosen=$('move-target').value;
  const title=$('move-name').value.trim();
  if(chosen==='new'&&!title){$('move-status').textContent='Enter a name for the new private playlist.';return;}
- const items=[...moveItems];$('move-dialog').close();
+ const items=[...moveItems];recentRemovalIds=[];$('move-dialog').close();
  await exclusive(async()=>{
   const stored=(await chrome.storage.local.get(storageKey()))[storageKey()];
   if(stored?.pending || stored?.updated!==state.updated)throw new Error('Playlist state changed. Reconnect before moving.');
-  let targets=destinations.filter(p=>moveDestinationIds.has(p.id));
+  let targets=destinations.filter(p=>moveDestinationIds.has(p.id)&&p.id!==sourceId);
   if(chosen==='new'){
    const created=await call('create-playlist',{title});
    const id=created.data?.playlistId;
@@ -665,17 +691,19 @@ async function performMove(){
     presentById.set(target.id,verified.present);
     if(verified.missing.length){
      state.lastMoveDiagnostic={stage:'verification',expected:allIds.length,found:allIds.length-verified.missing.length,missing:verified.missing.length};await save();
-     throw new Error(`YouTube has not shown ${verified.missing.length} of ${allIds.length} videos in ${target.title} after repeated checks. This batch remains in Watch Later. Copies already present will be skipped on your next move.`);
+     throw new Error(`YouTube has not shown ${verified.missing.length} of ${allIds.length} videos in ${target.title} after repeated checks. This batch remains in its source playlist. Copies already present will be skipped on your next move.`);
     }
    }
    if(stopped)throw new Error('Stopped after copying. Source videos were kept.');
+   if(transferMode==='copy'){state.pending=null;state.updated=Date.now();await save();moved+=batch.length;continue;}
    state.pending.phase='removing';await save();
    const response=await call('remove',{ids:batch.map(v=>v.setVideoId)});confirmRemoval(response.data);
    rememberRemoved(batch,state.pending.started,`Moved to ${destination.title}`);
    const keys=new Set(batch.map(v=>v.key));state.videos=state.videos.filter(v=>!keys.has(v.key));keys.forEach(k=>selected.delete(k));
    state.pending=null;state.updated=Date.now();await save();moved+=batch.length;await refreshTotal();
   }
-  message(`Moved ${moved} videos to ${destination.title}. Recorded in removal history. Restoring there will add them back to Watch Later without deleting the destination copy.`);
+  message(`${transferMode==='copy'?'Copied':'Moved'} ${moved} videos to ${destination.title}.${transferMode==='copy'?` Originals remain in ${sourceTitle}.`:' Recorded in removal history.'}`);
+  if(transferMode==='move'&&moved&&!stopped){$('removal-summary').textContent=`Moved ${moved}.`;$('search-again').hidden=false;if(!matching().length)clearSearch();}
  });
 }
 $('manage-playlists').onclick=()=>openMove([],true);
@@ -750,13 +778,14 @@ function rememberRemoved(videos, time, outcome) {
   state.history ||= [];
   for (const video of videos) {
     if (state.history.some(h=>h.video.setVideoId===video.setVideoId && h.removedAt===time)) continue;
-    state.history.unshift({historyId: crypto.randomUUID(), video:structuredClone(applyRecovered([video],state.recoveredMetadata)[0]), removedAt: time, outcome, restoredAt: null});
+    const historyId=crypto.randomUUID();recentRemovalIds.push(historyId);
+    state.history.unshift({historyId,sourceId,sourceTitle,video:structuredClone(applyRecovered([video],state.recoveredMetadata)[0]), removedAt: time, outcome, restoredAt: null});
   }
 }
 function restorable() { return (state.history || []).filter(h=>!h.restoredAt && h.video.videoId); }
 function renderHistory() {
   state.history=recoverHistoryDetails(state.history,state.recoveredMetadata);
-  const history = state.history || [];
+  const history = (state.history || []).filter(h=>((h.video.title||'')+' '+(h.video.channel||'')+' '+(h.sourceTitle||'Watch Later')).toLowerCase().includes(($('history-search')?.value||'').toLowerCase()));
   const size = new TextEncoder().encode(JSON.stringify(history)).length;
   $('history-count').textContent = `${history.length} entries · ${(size/1024).toFixed(0)} KB stored locally`;
   $('history-restore-selected').disabled = busy || !!state.pending || !historySelected.size;
@@ -776,7 +805,7 @@ function renderHistory() {
     check.setAttribute('aria-label',`Select removal: ${item.video.title}`);
     check.onchange=()=>{if(check.checked)historySelected.add(item.historyId);else historySelected.delete(item.historyId);renderHistory();};
     const detail=document.createElement('div');const title=document.createElement('strong');title.textContent=item.video.title;
-    const meta=document.createElement('small');meta.textContent=`${item.video.channel || ''} · ${new Date(item.removedAt).toLocaleString()} · ${item.restoredAt ? 'Restored / already present' : item.outcome}`;
+    const meta=document.createElement('small');meta.textContent=`${item.sourceTitle||'Watch Later'} · ${item.video.channel || ''} · ${new Date(item.removedAt).toLocaleString()} · ${item.restoredAt ? 'Restored / already present' : item.outcome}`;
     detail.append(title,meta);
     if(item.video.recovered?.sourceUrl){
      const source=document.createElement('a');source.textContent=item.video.recovered.source==='archive'?'Archived details ↗':'Recovered details ↗';source.href=item.video.recovered.sourceUrl;source.target='_blank';source.rel='noopener noreferrer';detail.append(source);
@@ -786,35 +815,33 @@ function renderHistory() {
   }
 }
 async function restore(historyIds) {
-  if(busy || state.pending || !historyIds.length)return;
-  await exclusive(async()=>{
-    const wanted=new Set(historyIds);
-    message('Checking Watch Later before restoring, to avoid duplicate additions…');
-    await scan();
-    if(!state.complete || stopped)throw new Error('Restore stopped: complete the playlist scan first.');
-    const present=new Set(state.videos.map(v=>v.videoId));
-    const candidates=(state.history || []).filter(h=>wanted.has(h.historyId) && !h.restoredAt && h.video.videoId);
-    for(const h of candidates)if(present.has(h.video.videoId)){h.restoredAt=Date.now();historySelected.delete(h.historyId);}
-    const unique=[...new Set(candidates.filter(h=>!h.restoredAt).map(h=>h.video.videoId))];
-    await refreshTotal();
-    if(state.youtubeCount && !state.youtubeCount.stale && unique.length>Math.max(0,5000-state.youtubeCount.value))throw new Error('Not enough playlist space for this restore. Select fewer history entries.');
-    await save();let restored=0;
-    for(let i=0;i<unique.length;i+=BATCH_SIZE){
-      if(stopped)break;
-      const ids=unique.slice(i,i+BATCH_SIZE);
-      const batchHistory=candidates.filter(h=>ids.includes(h.video.videoId));
-      state.pending={kind:'restore',ids,historyIds:batchHistory.map(h=>h.historyId),started:Date.now()};
-      if(state.youtubeCount)state.youtubeCount.stale=true;
-      await save();message(`Restoring ${ids.length} videos…`);
-      const result=await call('restore',{ids});
-      if(result.data?.error || result.data?.status!=='STATUS_SUCCEEDED')throw new Error('YouTube did not confirm this restore. Refresh the playlist before trying again.');
-      for(const h of batchHistory){h.restoredAt=Date.now();historySelected.delete(h.historyId);}
-      state.pending=null;state.complete=false;await save();restored+=ids.length;
-      await refreshTotal();
-    }
-    if(!stopped)await scan();
-    message(`YouTube confirmed ${restored} restored videos. Videos already present were skipped.${stopped?' Stopped; refresh the playlist before removing more.':''}`);
-  });
+ if(busy||state.pending||!historyIds.length)return;
+ await exclusive(async()=>{
+  const wanted=new Set(historyIds),candidates=(state.history||[]).filter(h=>wanted.has(h.historyId)&&!h.restoredAt&&h.video.videoId);
+  const groups=new Map();for(const h of candidates){const id=h.sourceId||'WL';if(!groups.has(id))groups.set(id,[]);groups.get(id).push(h);}
+  let restored=0;
+  for(const [id,entries] of groups){
+   if(stopped)break;
+   message(`Checking ${entries[0].sourceTitle||'Watch Later'} before restoring…`);
+   const present=await readDestination(id,'checking restore destination');
+   for(const h of entries)if(present.has(h.video.videoId)){h.restoredAt=Date.now();historySelected.delete(h.historyId);}
+   const missing=[...new Set(entries.filter(h=>!h.restoredAt).map(h=>h.video.videoId))];
+   if(present.size+missing.length>5000)throw new Error('Not enough playlist space. Select fewer entries to restore.');
+   await save();
+   for(let i=0;i<missing.length;i+=BATCH_SIZE){
+    if(stopped)break;
+    const ids=missing.slice(i,i+BATCH_SIZE),batch=entries.filter(h=>ids.includes(h.video.videoId));
+    state.pending={kind:'restore',playlistId:id,ids,historyIds:batch.map(h=>h.historyId),started:Date.now()};await save();
+    const result=await call('restore',{playlistId:id,ids});confirmRemoval(result.data);
+    const check=await verifyDestinationVideos({ids,read:()=>readDestination(id,'verifying restored videos'),stopped:()=>stopped});
+    if(check.missing.length)throw new Error('Some restored videos are not visible yet. Checking automatically before another restore.');
+    for(const h of batch){h.restoredAt=Date.now();historySelected.delete(h.historyId);}
+    state.pending=null;if(id===sourceId)state.complete=false;await save();restored+=ids.length;
+   }
+  }
+  if(!stopped)await scan();
+  message(`${restored} videos restored to their original playlists. Videos already present were skipped.${stopped?' Stopped.':''}`);
+ });
 }
 function exportHistory() {
   const url=URL.createObjectURL(new Blob([JSON.stringify({exported:new Date().toISOString(),history:state.history || []},null,2)],{type:'application/json'}));
@@ -837,12 +864,14 @@ $('watch-later-cleaner-search').addEventListener('input',()=>{
  const parsed=splitPills($('watch-later-cleaner-search').value);
  searchPills=[...new Set([...searchPills,...parsed.complete])];
  $('watch-later-cleaner-search').value=parsed.tail;
+ searchPaused=parsed.complete.length>0&&!parsed.tail.trim();
  selectionAnchor=null;page=0;render();
 });
 $('watch-later-cleaner-search').addEventListener('keydown',event=>{
+ if(event.key==='Enter'&&!$('watch-later-cleaner-search').value.trim()){event.preventDefault();searchPaused=false;page=0;render();}
  if(event.key==='Enter'&&$('watch-later-cleaner-search').value.trim()){
   event.preventDefault();const term=$('watch-later-cleaner-search').value.trim();
-  if(!parseSearch(term).error){if(!searchPills.includes(term))searchPills.push(term);$('watch-later-cleaner-search').value='';selectionAnchor=null;page=0;render();}
+  if(!parseSearch(term).error){searchPaused=false;if(!searchPills.includes(term))searchPills.push(term);$('watch-later-cleaner-search').value='';selectionAnchor=null;page=0;render();}
  }
 });
 $('unavailable').addEventListener('input',async()=>{
@@ -869,4 +898,18 @@ $('forget').onclick = async () => {
   state = {videos: [], complete: false, updated: null, pending: state.pending, history: state.history || [],recoveredMetadata:state.recoveredMetadata||{},recoveryAttempts:state.recoveryAttempts||{}}; await save(); selected.clear(); render(); message('Playlist cache cleared. Removal history is kept.');
 };
 window.addEventListener('beforeunload', event => { if (busy) { event.preventDefault(); event.returnValue = ''; } });
-render(); connect();
+initWorkspace({
+ get:()=>({account,tabId,state,busy,connecting,sourceId,sourceTitle,selected}),
+ call,exclusive,save,render,message,scan,refreshTotal,fetchEditablePlaylists,isStopped:()=>stopped,
+ openMove,askDeletePlaylist,readDestination,confirmRemoval,
+ connect:async(id)=>{preferredTabId=id||null;await connect();},
+ disconnect:()=>{if(busy)return;account=null;tabId=null;state={videos:[],complete:false};selected.clear();$('connection').textContent='Disconnected';render();},
+ switchPlaylist:async(id,title)=>{if(busy||!account)return false;await save();sourceId=id;sourceTitle=title;const saved=await chrome.storage.local.get([storageKey(),`history:${account}`]);state=saved[storageKey()]||{videos:[],complete:false,updated:null,pending:null};state.history=saved[`history:${account}`]||[];selected.clear();nativeSort=null;clearSearch();updateSortOptions();if(state.pending)await exclusive(recoverPending);render();return true;},
+ listDestinations:()=>destinations,setDestinations:list=>{destinations=list;}
+});
+$('undo-last').onclick=()=>restore([...recentRemovalIds]);
+$('history-search').oninput=()=>{historyPage=0;renderHistory();};
+for(const id of ['played-min','played-max'])$(id).oninput=()=>{page=0;render();};
+$('transfer-toggle').onclick=()=>{$('transfer-menu').hidden=!$('transfer-menu').hidden;$('transfer-toggle').setAttribute('aria-expanded',String(!$('transfer-menu').hidden));};
+for(const b of document.querySelectorAll('[data-transfer]'))b.onclick=()=>{transferMode=b.dataset.transfer;updateMoveForm();};
+render();connect();
