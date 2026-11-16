@@ -1,0 +1,72 @@
+Watch Later Cleaner v0.1.14
+
+22 automated tests passed. Added legacy and modern header count extraction, exclusion of view counts and video-title numbers, 4809 -> 191 available slots, live total refresh after each of two removal batches (500 and 214), and stale marking/recovery when a count read fails. Totals in tests deliberately differ from fetched row counts. Existing operators, continuation, 500-item transport and interrupted-removal tests still pass. JavaScript syntax checked.
+
+Tests use fixtures and DOM/Chrome API doubles, not the user browser. Live header variants and 500-item removal acceptance still require user verification. Chromium launch is blocked by the execution environment.
+
+0.1.4: HTML search attributes verified, renamed field references checked by the passing workflow test. All 22 tests still pass. Suppression of the user’s observed browser dropdown needs confirmation in their browser.
+
+0.1.5: small lazy-loaded thumbnails added with unavailable/error placeholders. Existing 22 tests and JavaScript syntax checks pass. Live image display has not been visually verified in the user browser.
+
+0.1.6: row-level All from this channel action added. Workflow fixture verifies clearing text search, activating channel scope, displaying all saved channel matches and clearing channel scope. All 22 tests pass.
+
+0.1.7: 28 tests pass. Six new cases cover single channels including collaborations, shared IDs across display-name changes, two/three collaborator unions, distinct IDs with identical names, safe legacy-cache inference, and preservation of channel navigation IDs in playlist parsing. Live failing user rows have not been supplied as raw data, so browser verification is still required.
+
+0.1.8: 30 tests pass. Workflow now fails if a forced scroll or confirmation is invoked on direct removal; exercises 7-item inclusive Shift-click, persistent removal records, selected history restore, skip-already-present behavior, new removal after restore and preservation of history through scans. Transport tests verify ACTION_ADD_VIDEO with addedVideoId. Additional range tests cover reverse ranges, page boundaries, missing removal IDs and stale anchors. Browser/YouTube restore has not been tested live.
+
+0.1.9: 35 tests pass. New tests cover comma/quoted-comma pills, OR semantics through UI state, progress extraction and unknown classification, playlist option parsing, copy-verify-remove sequencing, failed verification preventing deletion, create-private and target-add payloads, protection against WL as a move destination, and complete simulated existing/new playlist moves. All literal UI ID references resolve. Live API/UI behavior still needs user verification; no actual playlists or videos were mutated during these tests.
+
+0.1.10: 35 tests pass, with expanded workflow checks for the complete selected-video dialog, hidden selections across searches, deselection in the dialog, tri-state select-all, preserving selections outside the filter, and synchronized top/bottom pagination. All HTML IDs verified unique and all literal UI references resolve.
+
+0.1.11: 39 tests pass. Added native-menu extraction and wrong-playlist rejection, expanded-view detection, precise unavailable placeholder classification, local duration/title/reverse sorting, visible row numbers and input-event filtering before pill commitment. All IDs are unique and UI references resolve. Live native sorts and unavailable-view retrieval remain unverified against the user response.
+
+0.1.12: all 39 tests pass; existing workflow now checks the rendered destination list, playlist search/no-results state, prominent create button, new-name field visibility and create action label. CSS bounds checked in source; live visual layout not verified because Chromium cannot launch in this environment.
+
+0.1.13: all 39 tests pass. Expanded workflow verifies number-before-checkbox DOM order, automatic clearing/focus after all matching removals, retained query plus Search again after partial removal, dialog closure, preventScroll focus and preservation of selections across manual clear. Sticky layout remains source-checked, not browser-rendered in this restricted environment.
+
+0.1.14: markup/CSS-only change. Confirmed exactly one header checkbox, located within the sticky workspace after the internally scrollable controls. All HTML IDs unique. No selection logic changed. Live visual behavior has not been browser-tested here.
+
+
+v0.1.15: 39 automated tests passed using DOM and Chrome API doubles. Create-only verifies no source/destination video mutations, retained selection, selected new destination, empty-name validation, and unchanged immediate create-and-move flow. Live Chrome/YouTube testing was not available in this environment.
+
+
+v0.1.16: 40 automated tests passed. Added selected-sort extraction with unknown fallback; multi-destination workflow verifies all three destinations before removal, checkbox selection through filtering, create-only retaining previous destination selections, and second-destination failure preventing source removal. Unique HTML IDs and element references checked. Tests use DOM/API doubles; live Chrome and YouTube behavior not verified here.
+
+
+v0.1.17: 40 automated tests passed. Added transport coverage for playlist/delete, exact playlist ID, required account, account mismatch and system/invalid IDs. Workflow covers management without selected videos, cancel without request, rejected deletion, successful request with playlist still present, verified removal from the picker and destination selection, and no source-video mutations. HTML IDs and element references checked. Live Chrome/YouTube behavior remains untested; tests use DOM and API doubles.
+
+
+v0.1.18: 41 automated tests passed. Full move workflow now starts with empty destinations represented by selected-tab message renderers, then verifies populated responses before removal. Tests reject unknown/denied messages, sidebar messages, errors, continuations and mixed entries as empty destinations. Diagnostic checks exclude values and session context. Live response from the reported failure was not available; this addresses the identified empty-response gap without assuming all unfamiliar responses are empty.
+
+
+v0.1.19: All 41 automated tests passed. Transport rejects missing playlist-query video IDs before any request. Workflow mock now returns HTTP 400 for empty IDs, tests management before a scan and with loaded entries, deletion verification, and forced picker failure with hidden move controls and creation still accessible. Live YouTube testing remains pending.
+
+
+v0.1.20: Reproduced disabled post-creation checkboxes with a failing regression assertion. After the fix, all 41 automated tests passed, including enabled Delete buttons and checkboxes on every destination row and opening the new playlist deletion confirmation immediately after creation. No live YouTube mutations performed.
+
+
+v0.1.21: All 42 automated tests passed. Tests cover exact counts including zero and thousands separators, rejection of abbreviated or missing totals, new-playlist count, and background header/empty-playlist fallback for counts absent from picker metadata. Live YouTube not tested.
+
+
+v0.1.22: 43 automated tests passed. Covered delayed and persistently missing destination reads, stop during verification, automatic reconciliation after rejected removal and on reconnect, safe copy-phase lock recovery after failure and reconnect, Enter create-only without moving, and clearing the next playlist name. Live YouTube response from the reported verification failure was not available: delayed visibility is handled but not confirmed as its root cause.
+
+
+v0.1.23: All 43 automated tests passed. Workflow asserts all destination checkboxes start unchecked and Move videos is disabled on each fresh opening, including after cancellation and successful moves. Selecting a destination enables the action. Existing create-and-select and multiple-destination tests remain passing.
+
+
+v0.1.24: Markup inspection verifies searchbar, secondary controls and table header are siblings under the sticky workspace. Search and select-all sit outside the inner scrolling region; flex sizing constrains secondary controls. No JavaScript behavior changed. Live visual browser verification unavailable.
+
+
+v0.1.25: 47 automated tests passed. Added scroll calculation coverage for obscured, offscreen, visible, oversized results and variable header heights. Channel filtering schedules measurement after rendering. Existing selection and movement workflows pass. Live browser layout verification unavailable.
+
+
+v0.1.26: 52 automated tests passed. Recovery tests cover safe JSON parsing, braces/quotes, target mismatch, recommendation exclusion, preserved unavailable/removal IDs, local cache application, YouTube-first lookup, URL validation, archive fallback, no records, rate limiting and cancellation. Live direct lookup of xvHVjnGMYL4 succeeded from a 2026-10-12 Wayback snapshot, recovering Introducing Alexandria - The 113M-Source Library Your AI Agent Needs / Firecrawl. Earlier captured HTML also parsed correctly. Chrome optional-permission prompt and rendered UI not exercised in a live browser.
+
+
+v0.1.27: 52 automated tests passed. Expanded workflow covers bulk recovery after an HTTP 503, continuation to a no-result item, persistent row statuses after rescan, and successful row retry clearing the failure while retaining unavailable status. Live lookup c6f6zstXGbo reached one archived page but returned no usable metadata. No live browser visual verification.
+
+
+v0.1.28: 53 automated tests passed. Workflow covers recovery, removal, persisted title/channel/source, reconnect and history rendering. Unit test covers enriching older placeholder history while preserving IDs and timestamps and leaving the original object unchanged.
+
+
+v0.1.29: 53 automated tests passed. Workflow verifies bulk counts distinguish failures from unavailable details and successful retry starts a fresh count with a correct finished summary.
