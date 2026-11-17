@@ -1,9 +1,9 @@
-# Validation for v0.2.1
+# Validation for v0.2.2
 
 ## Completed locally
 
 - `npm run check`: JavaScript syntax, manifest version and narrowly scoped permissions, content security policy, HTML ID uniqueness, local stylesheet/script/icon references, and no inline scripts or event handlers.
-- `npm test`: **61 tests passed**. This includes parser and search units, session transport fixtures, the original multi-step playlist workflow, and a DOM integration test using the actual `app.html`.
+- `npm test`: **63 tests passed**. This includes parser and search units, session transport fixtures, the original multi-step playlist workflow, and a DOM integration test using the actual `app.html`.
 - The original workflow exercises a 732-entry playlist, 500/214 removal batches, counts independent of loaded entries, selections across searches, inclusive Shift-click ranges, history, restores, stopped scans, unconfirmed mutations, automatic recovery, playlist creation/deletion, multiple destinations, recovered metadata and per-row actions.
 - The full-page DOM workflow exercises comma-to-pill pause, category union and feed deduplication, channel search/assignment, saved feed persistence, copy retaining the original, moving from a regular playlist to Watch Later without duplicating an existing video, restoring to the source playlist, and preserving history while it is filtered.
 - History merge coverage verifies that an older workspace cannot erase a newer restore state or recovered details.
@@ -11,6 +11,13 @@
 - Packaging validates the ZIP and its manifest, uses an explicit runtime allowlist, and produces a SHA-256 checksum.
 
 These checks use fixtures and API doubles. They do not claim that YouTube's current live response format matches every fixture.
+
+## Inline tag validation for v0.2.2
+
+- Pure tests cover normalized-name deduplication, automatic feed creation/reuse, atomic validation and export/import of automatic category links.
+- DOM workflow covers comma, Enter, click-away, retained input nodes, tag removal and immediately opening the saved feed.
+- Browser fixture checks confirmed all three commit methods, removal of a tag, new feeds in the saved-feed list and opening a created feed. Screenshot: `docs/images/v0.2.2-tags.jpg`.
+- No live YouTube mutation is involved in local tagging. No Web Store publication or automatic-update claim is made.
 
 ## Visual checks completed for v0.2.1
 

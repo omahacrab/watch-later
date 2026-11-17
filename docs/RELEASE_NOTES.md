@@ -1,3 +1,11 @@
+# v0.2.2 inline channel tags
+
+Each channel row now has a tag input with existing-name suggestions. Comma, Enter and click-away commit tags. Each pill has an × to remove its channel assignment. Row updates preserve the active input and do not rebuild the list while typing.
+
+Assigning a tag adds the channel to My feeds and creates a matching saved feed immediately unless a single-category feed already exists. Reusing a name ignores case, outer whitespace and equivalent Unicode forms. Tag-created feeds retain their category link through export/import; category renaming updates linked names and category deletion removes linked feeds. Removing one assignment keeps the tag and feed for other channels. Bulk assignment and the existing category picker remain available.
+
+Validated with 63 tests and browser interaction using isolated fixtures. No new permissions, analytics or paid services. GitHub downloads remain manual; Chrome Web Store publication is the recommended automatic-update route and has not been performed.
+
 # v0.2.1 interface correction
 
 Restores the approved prototype's visual structure on the production extension. Version 0.2.0 carried the new functions but retained the old oversized layout.

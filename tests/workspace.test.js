@@ -40,7 +40,7 @@ test('real workspace markup: comma pause, categories, feeds, copy, move from reg
  try{
   await import('../app.js');await until(()=>$('connection').textContent.startsWith('Connected'),'connect');await $('load').onclick();
   assert.match($('matches').textContent,/2 loaded/);input('watch-later-cleaner-search','race');assert.match($('matches').textContent,/1 matching/);input('watch-later-cleaner-search','race,');assert.match($('matches').textContent,/2 matching/);assert.equal($('search-pills').children.length,1);input('watch-later-cleaner-search','other');assert.match($('matches').textContent,/2 matching/);$('clear-search').onclick();
-  assert.equal(document.querySelector('.build-version').textContent,'v0.2.1');
+  assert.equal(document.querySelector('.build-version').textContent,'v0.2.2');
   $('availability').value='available';$('availability').onchange();assert.match($('matches').textContent,/2 matching/);assert.equal($('clear-filters').hidden,false);$('clear-filters').onclick();assert.equal($('availability').value,'all');
   $('watch-filter').value='complete';$('watch-filter').dispatchEvent(new window.Event('input'));assert.match($('matches').textContent,/0 matching/);$('clear-filters').onclick();
   $('search-help-open').onclick();assert.match(document.querySelector('dialog[open]')?.textContent||document.querySelector('#workspace-dialog')?.textContent||document.body.textContent,/Find exactly what you want/);
@@ -56,5 +56,17 @@ test('real workspace markup: comma pause, categories, feeds, copy, move from reg
   click('[data-view="history"]');const restore=$('history-rows').querySelector('button');await restore.onclick();assert.equal(playlists.get('PL_TARGET').length,1);assert.ok(cache['history:owner'][0].restoredAt);assert.equal($('recover-details').hidden,true);
   // Filtering history must never discard records during a source refresh.
   $('history-search').value='does not match';$('history-search').oninput();await $('load').onclick();assert.equal(cache['history:owner'].length,1);
+  // Inline channel tags commit without replacing the active row or next input.
+  click('[data-view="feeds"]');click('[data-ui="channels-tab"]');
+  const tagInput=document.querySelector('[data-channel-tags="'+B+'"]');assert.ok(tagInput);
+  tagInput.value='Cooking,food';tagInput.dispatchEvent(new window.Event('input',{bubbles:true}));assert.equal(tagInput.value,'food');assert.equal(document.querySelector('[data-channel-tags="'+B+'"]'),tagInput);
+  const enter=new window.Event('keydown',{bubbles:true,cancelable:true});enter.key='Enter';tagInput.dispatchEvent(enter);assert.equal(enter.defaultPrevented,true);assert.equal(tagInput.value,'');
+  tagInput.value='True crime';tagInput.dispatchEvent(new window.Event('focusout',{bubbles:true}));
+  await until(()=>cache['feeds:owner'].categories.some(c=>c.name==='True crime'),'blur saved');
+  const savedLib=cache['feeds:owner'];for(const name of ['Cooking','food','True crime']){const cat=savedLib.categories.find(c=>c.name===name);assert.ok(savedLib.channels.find(c=>c.id===B).cats.includes(cat.id));assert.ok(savedLib.feeds.some(f=>f.autoCategoryId===cat.id));}
+  tagInput.value=' cooking,';tagInput.dispatchEvent(new window.Event('input',{bubbles:true}));await tick();assert.equal(cache['feeds:owner'].categories.filter(c=>c.name.toLowerCase()==='cooking').length,1);
+  const cookingId=savedLib.categories.find(c=>c.name==='Cooking').id;
+  click('[data-ui="remove-channel-tag"][data-id="'+B+'"][data-tag="'+cookingId+'"]');await until(()=>!cache['feeds:owner'].channels.find(c=>c.id===B).cats.includes(cookingId),'remove inline tag');assert.ok(cache['feeds:owner'].feeds.some(f=>f.autoCategoryId===cookingId),'removing a channel tag keeps the reusable feed');
+  click('[data-ui="feed-tab"]');const crime=cache['feeds:owner'].feeds.find(f=>f.name==='True crime');click('[data-ui="saved-feed"][data-id="'+crime.id+'"]');assert.match(document.querySelector('.feed-title').textContent,/True crime/);assert.match($('feeds-view').textContent,/1 channels/);
  }finally{globalThis.FormData=originalForm;}
 });

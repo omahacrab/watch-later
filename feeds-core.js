@@ -57,7 +57,7 @@ export function categoryVideos(videos,channels,cats,{all=false}={}){
   if(seen.has(v.videoId))return false;const matches=channelsFor(v,index).some(c=>chosen.some(s=>channelIdValid(s.id)&&c.id?s.id===c.id:nameKey(s.name)===nameKey(c.name)));if(matches)seen.add(v.videoId);return matches;
  });
 }
-export function removeCategory(library,id){return {...library,categories:library.categories.filter(c=>c.id!==id),channels:library.channels.map(c=>({...c,cats:(c.cats||[]).filter(x=>x!==id)})),feeds:library.feeds.map(f=>({...f,cats:(f.cats||[]).filter(x=>x!==id)}))};}
+export function removeCategory(library,id){return {...library,categories:library.categories.filter(c=>c.id!==id),channels:library.channels.map(c=>({...c,cats:(c.cats||[]).filter(x=>x!==id)})),feeds:library.feeds.filter(f=>f.autoCategoryId!==id).map(f=>({...f,cats:(f.cats||[]).filter(x=>x!==id)}))};}
 export function validLibrary(data){
  if(!data||!Array.isArray(data.categories)||!Array.isArray(data.channels)||!Array.isArray(data.feeds))throw new Error('Choose a feeds export from this extension.');
  if(data.categories.length>500||data.channels.length>10000||data.feeds.length>500)throw new Error('This export is too large.');
@@ -68,5 +68,26 @@ export function validLibrary(data){
  const cats=v=>Array.isArray(v)&&v.every(x=>ids.has(x));
  if(data.channels.some(c=>!str(c.id,250)||!str(c.name,300)||!cats(c.cats)||typeof c.added!=='boolean'||(!channelIdValid(c.id)&&!c.id.startsWith('name:'))))throw new Error('Invalid channel data.');
  if(data.feeds.some(f=>!str(f.id,100)||!str(f.name,100)||!cats(f.cats)||typeof f.all!=='boolean'||!['uploads','saved'].includes(f.source)||!Array.isArray(f.playlists)||f.playlists.some(p=>p!=='WL'&&!/^PL[\w-]+$/.test(p))))throw new Error('Invalid saved feed data.');
- return {categories:data.categories.map(c=>({id:c.id,name:c.name})),channels:data.channels.map(c=>({id:c.id,name:c.name,cats:c.cats,added:c.added})),feeds:data.feeds.map(f=>({id:f.id,name:f.name,cats:f.cats,all:f.all,source:f.source,playlists:f.playlists}))};
+ return {categories:data.categories.map(c=>({id:c.id,name:c.name})),channels:data.channels.map(c=>({id:c.id,name:c.name,cats:c.cats,added:c.added})),feeds:data.feeds.map(f=>({id:f.id,name:f.name,cats:f.cats,all:f.all,source:f.source,playlists:f.playlists,...(typeof f.autoCategoryId==='string'&&ids.has(f.autoCategoryId)&&!f.all&&f.cats.length===1&&f.cats[0]===f.autoCategoryId?{autoCategoryId:f.autoCategoryId}:{})}))};
+}
+
+// Tags are shared categories; their automatic feeds stay linked through renames.
+export function addChannelTags(library,channelId,names,makeId=()=>crypto.randomUUID()){
+ const channel=library.channels.find(c=>c.id===channelId);
+ if(!channel)throw new Error('This channel is no longer available. Refresh the channel list.');
+ const labels=[...new Map(names.map(s=>String(s).normalize('NFKC').trim()).filter(Boolean).map(s=>[nameKey(s),s])).values()];
+ if(labels.some(s=>s.length>100))throw new Error('Use 100 characters or fewer per tag.');
+ const missing=labels.filter(s=>!library.categories.some(c=>nameKey(c.name)===nameKey(s)));
+ if(library.categories.length+missing.length>500)throw new Error('You can save up to 500 categories.');
+ const existingIds=labels.map(s=>library.categories.find(c=>nameKey(c.name)===nameKey(s))?.id).filter(Boolean);
+ const needsFeed=id=>!library.feeds.some(f=>!f.all&&f.cats.length===1&&f.cats[0]===id);
+ if(library.feeds.length+missing.length+existingIds.filter(needsFeed).length>500)throw new Error('You can save up to 500 feeds.');
+ for(const name of labels){
+  let category=library.categories.find(c=>nameKey(c.name)===nameKey(name));
+  if(!category){category={id:makeId(),name};library.categories.push(category);}
+  if(!channel.cats.includes(category.id))channel.cats.push(category.id);
+  if(needsFeed(category.id))library.feeds.push({id:makeId(),name:category.name,cats:[category.id],all:false,source:'uploads',playlists:['WL'],autoCategoryId:category.id});
+ }
+ if(labels.length)channel.added=true;
+ return channel;
 }
