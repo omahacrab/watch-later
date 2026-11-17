@@ -21,3 +21,11 @@ Recovery first checks YouTube's public metadata endpoint. The optional archive f
 ## Feeds and future features
 
 Channel searches and upload reads go directly to YouTube through your selected tab. Categories are entered by you and stored locally. There is no automatic LLM tagging, usage-stat collection, or shared channel-tag database in this release. A future data-sharing feature would require a separately documented implementation and controls.
+
+## Limited Use and contact
+
+Information accessed through YouTube is used only to provide the playlist and feed features described here. The use of information received from Google APIs adheres to the Chrome Web Store User Data Policy, including the Limited Use requirements. Data is not sold, used for advertising, or used to determine creditworthiness or lending eligibility.
+
+History and feed exports can be imported into another installation you control. Imports stay local and do not themselves change YouTube playlists. You can clear cached playlists in the app; uninstalling removes this extension's local storage. To remove individual files you exported, delete those files separately.
+
+For privacy questions, use the project's issue tracker at https://github.com/omahacrab/watch-later/issues. Do not post private playlist exports, authentication information or personal account details in public issues.

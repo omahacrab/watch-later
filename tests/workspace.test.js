@@ -40,7 +40,7 @@ test('real workspace markup: comma pause, categories, feeds, copy, move from reg
  try{
   await import('../app.js');await until(()=>$('connection').textContent.startsWith('Connected'),'connect');await $('load').onclick();
   assert.match($('matches').textContent,/2 loaded/);input('watch-later-cleaner-search','race');assert.match($('matches').textContent,/1 matching/);input('watch-later-cleaner-search','race,');assert.match($('matches').textContent,/2 matching/);assert.equal($('search-pills').children.length,1);input('watch-later-cleaner-search','other');assert.match($('matches').textContent,/2 matching/);$('clear-search').onclick();
-  assert.equal(document.querySelector('.build-version').textContent,'v0.2.2');
+  assert.equal(document.querySelector('.build-version').textContent,'v0.2.3');
   $('availability').value='available';$('availability').onchange();assert.match($('matches').textContent,/2 matching/);assert.equal($('clear-filters').hidden,false);$('clear-filters').onclick();assert.equal($('availability').value,'all');
   $('watch-filter').value='complete';$('watch-filter').dispatchEvent(new window.Event('input'));assert.match($('matches').textContent,/0 matching/);$('clear-filters').onclick();
   $('search-help-open').onclick();assert.match(document.querySelector('dialog[open]')?.textContent||document.querySelector('#workspace-dialog')?.textContent||document.body.textContent,/Find exactly what you want/);
@@ -56,6 +56,9 @@ test('real workspace markup: comma pause, categories, feeds, copy, move from reg
   click('[data-view="history"]');const restore=$('history-rows').querySelector('button');await restore.onclick();assert.equal(playlists.get('PL_TARGET').length,1);assert.ok(cache['history:owner'][0].restoredAt);assert.equal($('recover-details').hidden,true);
   // Filtering history must never discard records during a source refresh.
   $('history-search').value='does not match';$('history-search').oninput();await $('load').onclick();assert.equal(cache['history:owner'].length,1);
+  const beforeImport=requests.length,exported=structuredClone(cache['history:owner']);
+  $('history-import-file').files=[{size:1000,text:async()=>JSON.stringify({history:exported})}];await $('history-import-file').onchange();
+  assert.equal(cache['history:owner'].length,1);assert.ok(cache['history:owner'][0].restoredAt);assert.equal(requests.length,beforeImport,'history import makes no YouTube requests');
   // Inline channel tags commit without replacing the active row or next input.
   click('[data-view="feeds"]');click('[data-ui="channels-tab"]');
   const tagInput=document.querySelector('[data-channel-tags="'+B+'"]');assert.ok(tagInput);

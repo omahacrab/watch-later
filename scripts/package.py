@@ -3,7 +3,7 @@ import hashlib,json,zipfile
 from pathlib import Path
 root=Path(__file__).resolve().parent.parent
 manifest=json.loads((root/'manifest.json').read_text())
-files=['manifest.json','app.html','app.css','workspace.css','app.js','workspace.js','background.js','youtube.js','core.js','channels.js','counts.js','list-options.js','playlists.js','recovery.js','scroll-position.js','search-pills.js','selection.js','feeds-core.js','README.md','PRIVACY.md','LICENSE','icon-16.png','icon-32.png','icon-48.png','icon-128.png']
+files=['manifest.json','app.html','app.css','workspace.css','app.js','workspace.js','background.js','youtube.js','core.js','channels.js','counts.js','list-options.js','playlists.js','recovery.js','scroll-position.js','search-pills.js','selection.js','feeds-core.js','history-import.js','README.md','PRIVACY.md','LICENSE','icon-16.png','icon-32.png','icon-48.png','icon-128.png']
 out=root/'dist';out.mkdir(exist_ok=True)
 archive=out/f"watch-later-v{manifest['version']}.zip"
 with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
@@ -15,3 +15,14 @@ with zipfile.ZipFile(archive) as z:
 checksum=hashlib.sha256(archive.read_bytes()).hexdigest()
 archive.with_suffix('.zip.sha256').write_text(f'{checksum}  {archive.name}\n')
 print(f'{archive.name}: {archive.stat().st_size:,} bytes; SHA-256 {checksum}')
+
+# The Chrome Web Store requires manifest.json at the ZIP root.
+store_archive=out/f"watch-later-webstore-v{manifest['version']}.zip"
+with zipfile.ZipFile(archive) as source,zipfile.ZipFile(store_archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as target:
+ for entry in source.infolist():
+  info=zipfile.ZipInfo(entry.filename.removeprefix('watch-later/'),date_time=entry.date_time);info.compress_type=zipfile.ZIP_DEFLATED;info.external_attr=entry.external_attr;target.writestr(info,source.read(entry))
+with zipfile.ZipFile(store_archive) as z:
+ assert json.loads(z.read('manifest.json'))['version']==manifest['version'];assert z.testzip() is None
+store_hash=hashlib.sha256(store_archive.read_bytes()).hexdigest()
+store_archive.with_suffix('.zip.sha256').write_text(f'{store_hash}  {store_archive.name}\n')
+print(f'{store_archive.name}: {store_archive.stat().st_size:,} bytes; SHA-256 {store_hash}')

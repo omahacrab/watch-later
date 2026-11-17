@@ -1,3 +1,9 @@
+# v0.2.3 store preparation and history migration
+
+Adds History > Import history to merge existing JSON exports into a new installation without changing YouTube videos. Validation rejects malformed records, strips unrelated fields and unsafe recovered links, preserves original playlist destinations and newer restoration state, and deduplicates records.
+
+Packaging now produces a separate Chrome Web Store ZIP with manifest.json at the root. Listing text, permission explanations, privacy policy and review instructions are prepared under store/. Store submission still requires publisher authentication; this release does not claim store approval or automatic updates for unpacked copies.
+
 # v0.2.2 inline channel tags
 
 Each channel row now has a tag input with existing-name suggestions. Comma, Enter and click-away commit tags. Each pill has an × to remove its channel assignment. Row updates preserve the active input and do not rebuild the list while typing.

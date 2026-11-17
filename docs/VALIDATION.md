@@ -1,9 +1,9 @@
-# Validation for v0.2.2
+# Validation for v0.2.3
 
 ## Completed locally
 
 - `npm run check`: JavaScript syntax, manifest version and narrowly scoped permissions, content security policy, HTML ID uniqueness, local stylesheet/script/icon references, and no inline scripts or event handlers.
-- `npm test`: **63 tests passed**. This includes parser and search units, session transport fixtures, the original multi-step playlist workflow, and a DOM integration test using the actual `app.html`.
+- `npm test`: **65 tests passed**. This includes parser and search units, session transport fixtures, the original multi-step playlist workflow, and a DOM integration test using the actual `app.html`.
 - The original workflow exercises a 732-entry playlist, 500/214 removal batches, counts independent of loaded entries, selections across searches, inclusive Shift-click ranges, history, restores, stopped scans, unconfirmed mutations, automatic recovery, playlist creation/deletion, multiple destinations, recovered metadata and per-row actions.
 - The full-page DOM workflow exercises comma-to-pill pause, category union and feed deduplication, channel search/assignment, saved feed persistence, copy retaining the original, moving from a regular playlist to Watch Later without duplicating an existing video, restoring to the source playlist, and preserving history while it is filtered.
 - History merge coverage verifies that an older workspace cannot erase a newer restore state or recovered details.
@@ -11,6 +11,12 @@
 - Packaging validates the ZIP and its manifest, uses an explicit runtime allowlist, and produces a SHA-256 checksum.
 
 These checks use fixtures and API doubles. They do not claim that YouTube's current live response format matches every fixture.
+
+## Store preparation validation for v0.2.3
+
+History-import tests cover restored-state preservation, recovered metadata, original source playlists, deduplication, unsafe links and malformed data. The DOM test imports an existing export and confirms that no YouTube requests occur. Both the unpacked and store archive layouts are checked during packaging.
+
+Store registration, actual submission and review remain separate from these local checks. No live approval claim is made.
 
 ## Inline tag validation for v0.2.2
 

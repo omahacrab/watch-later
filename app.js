@@ -1,3 +1,4 @@
+import {parseHistoryExport} from './history-import.js';
 import {initWorkspace} from './workspace.js';
 import {recoverDetails,applyRecovered,recoverHistoryDetails} from './recovery.js';
 import {firstResultScrollTarget} from './scroll-position.js';
@@ -815,7 +816,7 @@ function renderHistory() {
   $('history-restore-all').disabled = busy || !!state.pending || !restorable().length;
   $('history-select').disabled = busy || !restorable().length;
   $('history-clear').disabled = busy || !historySelected.size;
-  $('history-export').disabled = !history.length;
+  $('history-export').disabled = !history.length;$('history-import').disabled=busy||!account;
   $('history-selection').textContent = `${historySelected.size} selected`;
   historyPage = Math.min(historyPage, Math.max(0,Math.ceil(history.length/100)-1));
   $('history-prev').disabled = historyPage===0;
@@ -876,6 +877,17 @@ $('history-clear').onclick=()=>{historySelected.clear();renderHistory();};
 $('history-restore-selected').onclick=()=>restore([...historySelected]);
 $('history-restore-all').onclick=()=>restore(restorable().map(h=>h.historyId));
 $('history-export').onclick=exportHistory;
+$('history-import').onclick=()=>{if(!busy&&account)$('history-import-file').click();};
+$('history-import-file').onchange=async()=>{
+ const input=$('history-import-file'),file=input.files?.[0];input.value='';if(!file||busy||!account)return;const owner=account;
+ try{
+  if(file.size>25*1024*1024)throw new Error('Choose a history export smaller than 25 MB.');
+  const incoming=parseHistoryExport(JSON.parse(await file.text()));
+  if(owner!==account||busy)throw new Error('The connection changed. Import again after connecting to the correct account.');
+  if(!confirm(`Merge ${incoming.length} removal-history entries into the connected account? Use an export from this same YouTube account. No videos will be changed.`))return;
+  await exclusive(async()=>{const stored=(await chrome.storage.local.get(`history:${owner}`))[`history:${owner}`]||[];state.history=mergeRemovalHistory(mergeRemovalHistory(stored,state.history),incoming);await save();renderHistory();message(`Imported ${incoming.length} history entries. No YouTube videos changed.`);});
+ }catch(error){message(error.message,true);}
+};
 $('history-prev').onclick=()=>{historyPage--;renderHistory();};
 $('history-next').onclick=()=>{historyPage++;renderHistory();};
 

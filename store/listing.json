@@ -1,0 +1,29 @@
+{
+  "name": "Watch Later: YouTube Playlists & Feeds",
+  "language": "English",
+  "visibility": "Unlisted",
+  "price": "Free",
+  "category_preference": "Productivity / Tools (choose the closest current dashboard category)",
+  "homepage_url": "https://github.com/omahacrab/watch-later",
+  "support_url": "https://github.com/omahacrab/watch-later/issues",
+  "privacy_policy_url": "https://github.com/omahacrab/watch-later/blob/main/PRIVACY.md",
+  "single_purpose": "Help users organise their saved YouTube videos and channel collections in one local workspace, using search, playlist transfers, removal history and category-based feeds.",
+  "description": "Turn a crowded Watch Later list into a collection you can search and organise.\n\nSearch titles and channels as you type, use exact phrases or comma-separated OR searches, and keep selections while you explore other results. See thumbnails and the playback progress YouTube reports, including filters for completed, partially watched and a custom played-percentage range.\n\nMove or copy videos to one or several playlists, create a destination without leaving the app, and manage your editable playlists. Moves remove videos from the source only after the destination copies have been verified.\n\nRemoval history keeps the video details so you can review and restore earlier removals. Export and import history when moving between installations. Optional unavailable-video information recovery looks for titles and channels through YouTube and, with permission, the Internet Archive. It cannot make a private or deleted video playable.\n\nBuild My feeds from channels you find on YouTube or discover in your saved playlists. Type tags directly in a channel row, confirm with Enter, comma or clicking away, and use the resulting category feed immediately. Combine categories into saved views and browse recent uploads or videos already saved in your playlists.\n\nHOW IT WORKS\nOpen a signed-in YouTube tab, launch the extension and connect to that tab. Load your playlist to search it. YouTube controls how many entries arrive per page; the extension follows continuation pages automatically.\n\nPRIVACY\nPlaylist metadata, playback progress, channel tags and removal history are stored locally in your Chrome profile. Requests go directly to YouTube for the features you use. Optional archive recovery sends the requested video ID to the Internet Archive without your YouTube credentials. There is no developer backend, advertising or analytics. No API key or paid AI service is required.\n\nLIMITS\nThis experimental extension uses YouTube's internal web endpoints, which may change. Missing playback progress is not treated as proof that a video is unwatched. Feeds load on demand. This is an independent project and is not affiliated with YouTube or Google.",
+  "permissions": {
+    "scripting": "Runs the packaged request function in the YouTube tab selected by the user. This reads playlist/channel data and performs requested playlist operations using the existing YouTube session. It does not inject remote scripts or run on unrelated websites.",
+    "storage": "Stores playlist caches, user-created channel tags and feed definitions, recovered video metadata and removal history locally in this Chrome profile. Data is separated by a hash of the selected YouTube account identity.",
+    "https://www.youtube.com/*": "Required to connect to a signed-in YouTube tab, read saved playlists and channel uploads, search channels, and carry out user-requested moves, copies, removals, restores and playlist management. Session authentication stays inside YouTube's page.",
+    "https://web.archive.org/*": "Optional permission requested only for unavailable-video detail recovery. Fetches archive records for the selected video IDs, omits credentials and never executes archived code. Declining permission leaves YouTube-only recovery available."
+  },
+  "remote_code": false,
+  "data_handling_notes": {
+    "website_content": "Video and playlist titles, channel identities, thumbnails, playlist metadata and recovered details are processed to display and organise the user's library.",
+    "authentication_information": "The packaged function accesses existing YouTube session values inside the selected YouTube page to authorise requests to YouTube. Cookie values and authorisation headers are not returned to the extension UI, exported or sent to the developer.",
+    "user_activity": "YouTube-reported playback progress and removal/restore history are used for user-visible filters and history. No general browsing, mouse, keystroke or advertising tracking is performed.",
+    "developer_receives_data": false,
+    "sold_to_third_parties": false,
+    "unrelated_purposes": false,
+    "creditworthiness_or_lending": false
+  },
+  "test_instructions": "Use a reviewer-controlled Google/YouTube account with a few available videos in Watch Later. No developer account, API key or paid subscription is required. Keep the YouTube tab signed in and open. Click the extension action, connect to the tab and load Watch Later. Test quoted search, selection, playback filters and the selected-video drawer. Use disposable playlists for Create, Copy, Move, Remove and Restore checks. A Move removes from the source only after destination copies are verified. My feeds > Channels can discover channels from loaded playlists or search YouTube. Add a tag with comma, Enter or blur; it creates a saved feed. Archive access is optional; denying it must not block playlist management. Recovery can fail for unavailable videos with no archive. History and feeds exports/imports use local JSON files. All executable code is bundled; archived HTML is parsed as data and is not executed."
+}

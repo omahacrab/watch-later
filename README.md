@@ -2,7 +2,7 @@
 
 Search your saved videos, organise playlists, restore removals, and build personal feeds from channels and categories.
 
-**v0.2.2 is an experimental release candidate.** It uses YouTube's internal web endpoints, which can change without notice. Automated checks cover the main workflows; this release still needs verification against a real signed-in YouTube account. This is an independent project, not affiliated with YouTube or Google.
+**v0.2.3 is an experimental release candidate.** It uses YouTube's internal web endpoints, which can change without notice. Automated checks cover the main workflows; this release still needs verification against a real signed-in YouTube account. This is an independent project, not affiliated with YouTube or Google.
 
 The v0.2.1 update restores the approved compact interface: counts beside the title, sticky search and selection tools, a selected-video drawer, compact playlist cards and the merged feeds/category view. The header displays the installed version.
 
@@ -10,7 +10,7 @@ The v0.2.1 update restores the approved compact interface: counts beside the tit
 
 ## Install in Chrome
 
-1. [Download watch-later-v0.2.2.zip](https://github.com/omahacrab/watch-later/raw/refs/heads/main/downloads/watch-later-v0.2.2.zip).
+1. [Download watch-later-v0.2.3.zip](https://github.com/omahacrab/watch-later/raw/refs/heads/main/downloads/watch-later-v0.2.3.zip).
 2. Extract the ZIP. Keep the extracted `watch-later` folder somewhere permanent.
 3. Open `chrome://extensions` and enable **Developer mode**.
 4. Choose **Load unpacked**, then select the folder that directly contains `manifest.json`. Do not select the ZIP or its outer download folder.
@@ -23,7 +23,7 @@ No Node.js, API key, paid service or build step is needed to use the downloaded 
 
 ## Updates
 
-The GitHub ZIP is an unpacked developer installation and does not update itself. Automatic updates for ordinary Windows/macOS Chrome users require a Chrome Web Store installation. An unlisted listing can distribute a testing version by direct link, and updates still go through store review. This project has not yet been published to the store.
+The GitHub ZIP is an unpacked developer installation and does not update itself. Automatic updates for ordinary Windows/macOS Chrome users require a Chrome Web Store installation. An unlisted listing can distribute a testing version by direct link, and updates still go through store review. This project has not yet been published to the store. The [submission materials and migration steps](store/README.md) are prepared.
 
 See Chrome's [distribution guidance](https://developer.chrome.com/docs/extensions/how-to/distribute) and [update process](https://developer.chrome.com/docs/webstore/update).
 
@@ -32,7 +32,7 @@ See Chrome's [distribution guidance](https://developer.chrome.com/docs/extension
 - **Search and select:** filter as you type; quoted phrases, `title:`, `channel:`, exclusions and OR; comma-separated pills; persistent selections across searches; a selected-videos view; inclusive Shift-click ranges; sticky search and select-all; numbered rows and top/bottom pagination.
 - **See playback:** thumbnails, reported played percentage, completed/partly played filters and a custom percentage range. Missing progress is labelled as missing, not assumed unwatched.
 - **Organise playlists:** browse your editable playlists with counts; create private playlists; delete playlists with confirmation; inspect their videos; move or copy to several destinations. The arrow on the transfer button switches between Move and Copy. Creating a playlist can either select it for later or create and transfer immediately.
-- **Clean up:** bulk removal and per-row removal, searchable removal history, individual/selected/all restores, and undo of the latest removal. Copies do not remove the source. Moves remove a source batch only after every destination has been checked.
+- **Clean up:** bulk removal and per-row removal, searchable removal history, individual/selected/all restores, history import/export for moving between installations, and undo of the latest removal. Copies do not remove the source. Moves remove a source batch only after every destination has been checked.
 - **Recover unavailable information:** select unavailable videos to reveal **Recover 'unavailable' info**. Recovery checks YouTube metadata and, with optional permission, the Internet Archive. It reports live counts and individual failures, and preserves recovered details in history. Recovery cannot make a deleted or private video playable.
 - **Tag channels directly:** each channel row has a tag input. Comma, Enter or clicking away saves the tag and creates a saved feed if a matching single-category feed does not already exist. Existing tag names are suggested; × removes that channel’s assignment without deleting the shared tag or feed.
 - **Build My feeds:** search YouTube for channels or discover them from loaded playlists; assign several categories to each channel; browse saved videos or recent channel uploads; combine categories and save the view as a feed. Save feed videos to Watch Later. Export/import feed definitions locally.
