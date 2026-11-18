@@ -5,7 +5,8 @@ import {firstResultScrollTarget} from './scroll-position.js';
 import {playlistOptions,sortVideos} from './list-options.js';
 import {editablePlaylists,emptyDestination,playlistStructure,verifyDestinationVideos} from './playlists.js';
 import {splitPills,watchMatches} from './search-pills.js';
-import {selectRange} from './selection.js';
+import {parseWatchHistory} from './watch-history.js';
+import {selectRange,selectableVideo} from './selection.js';
 import {channelIndex, channelsFor, sharesChannel} from './channels.js';
 import {extractPlaylistTotal, capacity} from './counts.js';
 import {BATCH_SIZE, parsePlaylist, mergeEntries, filterEntries, parseSearch, batches, confirmRemoval, mergeRemovalHistory} from './core.js';
@@ -28,6 +29,7 @@ let managingPlaylists=false,deleteTarget=null;
 let selectionAnchor = null, historyPage = 0;
 const historySelected = new Set();
 const PAGE_SIZE = 100;
+const isWatchHistory=()=>sourceId==='FEhistory';
 function recordTotal(value, source) {
   if (value === null) return false;
   state.youtubeCount = {value, checkedAt: Date.now(), source, stale: false};
@@ -90,6 +92,9 @@ function render() {
   $('recover-all-details').hidden=true;
   $('played-range').hidden=$('watch-filter').value!=='range';
   $('current-playlist-title').textContent=sourceTitle;
+  $('watch-history-note').hidden=!isWatchHistory();
+  $('move').textContent=$('selected-move').textContent=isWatchHistory()?'Copy…':'Move…';
+  $('selected-remove').hidden=isWatchHistory();
   document.querySelector('.capacity-card').hidden=sourceId!=='WL';
   document.dispatchEvent(new Event('workspace-state'));
   $('recover-details').disabled=busy||connecting||!account||!recoveryItems.length;
@@ -130,7 +135,7 @@ function render() {
   $('search-pause-note').hidden=!searchPaused;
   $('clear-search').hidden=!searchPills.length&&!$('watch-later-cleaner-search').value;
   $('clear-filters').hidden=$('watch-filter').value==='all'&&$('availability').value==='all'&&!channelFilter;
-  for(const id of ['clear','move','remove','selected-view'])$(id).hidden=!selected.size;
+  for(const id of ['clear','move','remove','selected-view'])$(id).hidden=!selected.size||(id==='remove'&&isWatchHistory());
   $('selection-hint').hidden=selected.size>0;
   $('selected-move').disabled=$('selected-remove').disabled=busy||!selected.size||!state.complete||!!state.pending;
   $('selected-clear').disabled=busy||!selected.size;
@@ -138,7 +143,7 @@ function render() {
   $('history-nav-count').textContent=(state.history||[]).length.toLocaleString();$('history-nav-count').hidden=!(state.history||[]).length;
   $('export').disabled = !state.videos.length;
   $('forget').disabled = busy || !account;
-  const selectable = matches.filter(v => v.setVideoId);
+  const selectable = matches.filter(selectableVideo);
   const selectedMatches = selectable.filter(v => selected.has(v.key)).length;
   $('select-all-checkbox').checked = selectable.length > 0 && selectedMatches === selectable.length;
   $('select-all-checkbox').indeterminate = selectedMatches > 0 && selectedMatches < selectable.length;
@@ -164,7 +169,7 @@ function render() {
   const index = channelIndex(state.videos);
   for (const [offset,video] of matches.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).entries()) {
     const row = document.createElement('div'); row.className = `video-row video${selected.has(video.key) ? ' chosen' : ''}`;
-    const check = document.createElement('input'); check.type = 'checkbox'; check.checked = selected.has(video.key); check.disabled = busy || !video.setVideoId;
+    const check = document.createElement('input'); check.type = 'checkbox'; check.checked = selected.has(video.key); check.disabled = busy || !selectableVideo(video);
     check.setAttribute('aria-label', `Select ${video.title}`);
     check.addEventListener('click', event => {
       selectionAnchor = selectRange(selected, matches, selectionAnchor, video.key, event.shiftKey, check.checked);
@@ -187,7 +192,7 @@ function render() {
     const description = document.createElement('div'); description.className = 'video-description';
     const title = document.createElement(video.videoId ? 'a' : 'strong'); title.textContent = video.title;title.className='videotitle';
     if (video.videoId) { title.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}`; title.target = '_blank'; title.rel = 'noopener noreferrer'; }
-    const subtitle = document.createElement('small'); subtitle.textContent = [video.channel, typeof video.watchedPercent==='number'?`${video.watchedPercent}% played`:'', video.unavailable ? 'Unavailable' : '', !video.setVideoId ? 'No removal ID supplied by YouTube' : ''].filter(Boolean).join(' · ');
+    const subtitle = document.createElement('small'); subtitle.textContent = [video.channel, typeof video.watchedPercent==='number'?`${video.watchedPercent}% played`:'', video.unavailable ? 'Unavailable' : '', !video.setVideoId && !isWatchHistory() ? 'No removal ID supplied by YouTube' : ''].filter(Boolean).join(' · ');
     const channelLine = document.createElement('div'); channelLine.className = 'channel-line videometa';
     const allFromChannel = document.createElement('button');
     allFromChannel.type = 'button'; allFromChannel.className = 'channel-action';
@@ -216,8 +221,8 @@ function render() {
     const removeOne = document.createElement('button'); removeOne.textContent = 'Remove'; removeOne.className = 'danger row-remove';
     removeOne.disabled = busy || !state.complete || !!state.pending || !video.setVideoId;
     removeOne.setAttribute('aria-label', `Remove ${video.title} from ${sourceTitle}`);
-    removeOne.onclick = () => remove([video]);
-    const moveOne=document.createElement('button');moveOne.textContent='Move…';moveOne.className='row-remove';moveOne.disabled=removeOne.disabled || !video.videoId;moveOne.onclick=()=>openMove([video]);
+    removeOne.onclick = () => remove([video]);removeOne.hidden=isWatchHistory();
+    const moveOne=document.createElement('button');moveOne.textContent=isWatchHistory()?'Copy…':'Move…';moveOne.className='row-remove';moveOne.disabled=busy || !state.complete || !!state.pending || !selectableVideo(video) || !video.videoId;moveOne.onclick=()=>openMove([video]);
     rowActions.append(moveOne, removeOne);
     if(video.unavailable&&!video.recovered){
      const attempt=state.recoveryAttempts?.[video.videoId];
@@ -363,7 +368,31 @@ async function recoverPending(){
  message('Recovery complete. Your playlist and history are up to date.');
 }
 async function load() { await exclusive(scan); }
+async function scanWatchHistory(){
+ const previous=state;
+ const next={...state,videos:[],complete:false,updated:Date.now(),pending:null,youtubeCount:null,listOptions:null,loadedSort:null,youtubeTabSort:null};
+ let token=null,first=true;const visited=new Set();
+ do{
+  if(stopped)break;
+  message(`Loading YouTube History: ${next.videos.length.toLocaleString()} videos…`);
+  const result=await call('browse',{token});
+  const parsed=parseWatchHistory(result.data);
+  if(parsed.suspiciousEnd)throw new Error('History has a next-page marker without a usable continuation. Refresh to retry.');
+  const before=next.videos.length;next.videos=mergeEntries(next.videos,parsed.videos);
+  token=parsed.token;
+  if(token&&visited.has(token))throw new Error('YouTube repeated a History page. Refresh to retry.');
+  if(token)visited.add(token);
+  if(visited.size>500)throw new Error('History scan limit reached. Partial results are saved.');
+  if(!first&&token&&next.videos.length===before&&parsed.videos.length===0)throw new Error('YouTube returned an empty History continuation. Refresh to retry.');
+  if(first){selected.clear();selectionAnchor=null;page=0;}first=false;
+  state=next;state.updated=Date.now();await save();render();
+ }while(token);
+ if(first){state=previous;return;}
+ state.complete=!stopped&&!token;await save();updateSortOptions();render();
+ message(`${state.complete?'History scan finished':'History scan stopped'}: ${state.videos.length.toLocaleString()} videos loaded. Search and copy videos to playlists.`);
+}
 async function scan() {
+    if(isWatchHistory())return scanWatchHistory();
     const previousPending = state.pending;
     const youtubeCount = state.youtubeCount;
     const history = state.history || [];
@@ -456,6 +485,7 @@ function clearSearch(){
 }
 $('clear-search').onclick=clearSearch;$('search-again').onclick=clearSearch;
 function review() {
+  if(isWatchHistory())return;
   const items = state.videos.filter(v => selected.has(v.key));
   if (!items.length || busy || !state.complete || state.pending) return;
   $('review').querySelector('h2').textContent=`Remove from ${sourceTitle}?`;
@@ -465,6 +495,7 @@ function review() {
 }
 
 async function remove(items = null) {
+  if(isWatchHistory())return;
   let completedCount = 0, completed = false;recentRemovalIds=[];
   $('review').close();
   if (!state.complete || state.pending) return;
@@ -518,10 +549,10 @@ async function fetchEditablePlaylists(){
 }
 async function openMove(items,manage=false) {
  if(busy || !account || (!manage&&(state.pending || !state.complete)))return;
- managingPlaylists=manage;transferMode='move';
+ managingPlaylists=manage;transferMode=isWatchHistory()?'copy':'move';
  const countGeneration=++playlistCountGeneration;
  moveItems=manage?[]:items || state.videos.filter(v=>selected.has(v.key));
- if(!manage&&(!moveItems.length || moveItems.some(v=>!v.videoId || !v.setVideoId))){message('Every selected video needs a video ID and removal ID to move.',true);return;}
+ if(!manage&&(!moveItems.length || moveItems.some(v=>!v.videoId || !selectableVideo(v)))){message('Every selected video needs a video ID and removal ID to move.',true);return;}
  $('move-heading').textContent=manage?'Manage playlists':`Move ${moveItems.length} ${moveItems.length===1?'video':'videos'}`;
  $('move-cancel').textContent=manage?'Close':'Cancel';
  $('move-status').textContent='Loading your editable playlists…';
@@ -602,7 +633,7 @@ function updateMoveForm(){
  $('move-name-wrap').hidden=!create; $('move-existing-wrap').hidden=create;
  $('move-new').setAttribute('aria-pressed',String(create));$('move-existing').setAttribute('aria-pressed',String(!create));
  $('move-confirm').textContent=create?`Create playlist & ${transferMode} videos`:`${transferMode==='copy'?'Copy':'Move'} ${moveItems.length} ${moveItems.length===1?'video':'videos'}`;
- $('transfer-toggle').hidden=managingPlaylists;$('transfer-menu').hidden=true;
+ $('transfer-toggle').hidden=managingPlaylists||isWatchHistory();$('transfer-menu').hidden=true;
  $('transfer-toggle').setAttribute('aria-expanded','false');
  $('move-explanation').textContent=transferMode==='copy'?`Videos stay in ${sourceTitle}. Copies are checked in every destination.`:`Videos are removed from ${sourceTitle} only after every destination is verified. Moves are recorded in history.`;
  $('move-destination-count').textContent=`${moveDestinationIds.size} ${moveDestinationIds.size===1?'playlist':'playlists'} selected`;
@@ -671,6 +702,7 @@ $('move-name').addEventListener('keydown',event=>{
 $('move-dialog').addEventListener('cancel',event=>{if(busy)event.preventDefault();});
 async function performMove(){
  if(busy)return;
+ if(isWatchHistory())transferMode='copy';
  const chosen=$('move-target').value;
  const title=$('move-name').value.trim();
  if(chosen==='new'&&!title){$('move-status').textContent='Enter a name for the new private playlist.';return;}
@@ -692,7 +724,8 @@ async function performMove(){
   const presentById=new Map();
   for(const target of targets)presentById.set(target.id,await readDestination(target.id,'checking destination before copying'));
   let moved=0;
-  for(const batch of batches(items)){
+  const transferBatches=transferMode==='copy'?Array.from({length:Math.ceil(items.length/BATCH_SIZE)},(_,i)=>items.slice(i*BATCH_SIZE,(i+1)*BATCH_SIZE)):batches(items);
+  for(const batch of transferBatches){
    if(stopped)break;
    const allIds=[...new Set(batch.map(v=>v.videoId))];
    state.pending={kind:'move',phase:'adding',destination,destinations:targets,videos:batch,started:Date.now()};await save();
@@ -795,7 +828,7 @@ $('selected-prev').onclick=()=>{selectedPage--;renderSelected();};
 $('selected-next').onclick=()=>{selectedPage++;renderSelected();};
 $('select-all-checkbox').onchange=()=>{
  const check=$('select-all-checkbox').checked;
- for(const video of matching())if(video.setVideoId){if(check)selected.add(video.key);else selected.delete(video.key);}
+ for(const video of matching())if(selectableVideo(video)){if(check)selected.add(video.key);else selected.delete(video.key);}
  selectionAnchor=null;render();
 };
 function rememberRemoved(videos, time, outcome) {
@@ -921,7 +954,7 @@ $('unavailable').addEventListener('input',async()=>{
  if($('unavailable').checked && !state.videos.some(v=>v.unavailable))message(state.unavailableRequested?'YouTube returned no identifiable unavailable entries, even after requesting the expanded view.':'No unavailable entries returned. YouTube did not expose a usable show-unavailable command. Export the list so its menu diagnostics can be checked.',true);
 });
 $('clear-channel').onclick = () => { selectionAnchor = null; channelFilter = null; page = 0; render(); };
-$('select').onclick = () => { matching().filter(v => v.setVideoId).forEach(v => selected.add(v.key)); render(); };
+$('select').onclick = () => { matching().filter(selectableVideo).forEach(v => selected.add(v.key)); render(); };
 $('clear').onclick = () => { selectionAnchor = null; selected.clear(); render(); };
 $('prev-top').onclick = () => { page--; render(); }; $('next-top').onclick = () => { page++; render(); };
 $('prev').onclick = () => { page--; render(); }; $('next').onclick = () => { page++; render(); };
@@ -949,5 +982,5 @@ $('undo-last').onclick=()=>restore([...recentRemovalIds]);
 $('history-search').oninput=()=>{historyPage=0;renderHistory();};
 for(const id of ['played-min','played-max'])$(id).oninput=()=>{page=0;render();};
 $('transfer-toggle').onclick=()=>{$('transfer-menu').hidden=!$('transfer-menu').hidden;$('transfer-toggle').setAttribute('aria-expanded',String(!$('transfer-menu').hidden));};
-for(const b of document.querySelectorAll('[data-transfer]'))b.onclick=()=>{transferMode=b.dataset.transfer;updateMoveForm();};
+for(const b of document.querySelectorAll('[data-transfer]'))b.onclick=()=>{transferMode=isWatchHistory()?'copy':b.dataset.transfer;updateMoveForm();};
 render();connect();

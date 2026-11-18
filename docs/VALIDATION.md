@@ -1,9 +1,9 @@
-# Validation for v0.2.3
+# Validation for v0.2.4
 
 ## Completed locally
 
 - `npm run check`: JavaScript syntax, manifest version and narrowly scoped permissions, content security policy, HTML ID uniqueness, local stylesheet/script/icon references, and no inline scripts or event handlers.
-- `npm test`: **65 tests passed**. This includes parser and search units, session transport fixtures, the original multi-step playlist workflow, and a DOM integration test using the actual `app.html`.
+- `npm test`: **69 tests passed**. This includes parser and search units, session transport fixtures, the original multi-step playlist workflow, and a DOM integration test using the actual `app.html`.
 - The original workflow exercises a 732-entry playlist, 500/214 removal batches, counts independent of loaded entries, selections across searches, inclusive Shift-click ranges, history, restores, stopped scans, unconfirmed mutations, automatic recovery, playlist creation/deletion, multiple destinations, recovered metadata and per-row actions.
 - The full-page DOM workflow exercises comma-to-pill pause, category union and feed deduplication, channel search/assignment, saved feed persistence, copy retaining the original, moving from a regular playlist to Watch Later without duplicating an existing video, restoring to the source playlist, and preserving history while it is filtered.
 - History merge coverage verifies that an older workspace cannot erase a newer restore state or recovered details.
@@ -11,6 +11,12 @@
 - Packaging validates the ZIP and its manifest, uses an explicit runtime allowlist, and produces a SHA-256 checksum.
 
 These checks use fixtures and API doubles. They do not claim that YouTube's current live response format matches every fixture.
+
+## YouTube History validation for v0.2.4
+
+Parser fixtures cover classic video rows, modern cards, primary-content scoping, pagination, deduplication, empty history, errors and missing continuation tokens. Transport tests check FEhistory routing and reject all playlist mutations against History. The full-page DOM workflow loads History, searches/selects a video without a playlist removal ID, copies it into a destination, confirms source and removal-history retention, checks unavailable destinations/deletion, and verifies a failed refresh preserves cached results. Feed import/export accepts the History source.
+
+The attempted v0.2.4 browser screenshot check was blocked by Chromium startup failing with `socket() failed: Operation not permitted`. No new visual check is claimed. Live signed-in YouTube History has not been tested. Automated fixtures do not establish compatibility with every account response or YouTube interface variant.
 
 ## Store preparation validation for v0.2.3
 

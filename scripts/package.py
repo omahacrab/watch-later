@@ -3,7 +3,7 @@ import hashlib,json,zipfile
 from pathlib import Path
 root=Path(__file__).resolve().parent.parent
 manifest=json.loads((root/'manifest.json').read_text())
-files=['manifest.json','app.html','app.css','workspace.css','app.js','workspace.js','background.js','youtube.js','core.js','channels.js','counts.js','list-options.js','playlists.js','recovery.js','scroll-position.js','search-pills.js','selection.js','feeds-core.js','history-import.js','README.md','PRIVACY.md','LICENSE','icon-16.png','icon-32.png','icon-48.png','icon-128.png']
+files=['manifest.json','app.html','app.css','workspace.css','app.js','workspace.js','background.js','youtube.js','core.js','channels.js','counts.js','list-options.js','playlists.js','recovery.js','scroll-position.js','search-pills.js','selection.js','feeds-core.js','history-import.js','watch-history.js','README.md','PRIVACY.md','LICENSE','icon-16.png','icon-32.png','icon-48.png','icon-128.png']
 out=root/'dist';out.mkdir(exist_ok=True)
 archive=out/f"watch-later-v{manifest['version']}.zip"
 with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:

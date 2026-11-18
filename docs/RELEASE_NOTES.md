@@ -1,3 +1,13 @@
+# v0.2.4 YouTube History in playlists
+
+- Adds a built-in History card in Your playlists, separate from Removal history.
+- Loads YouTube history through the History browse endpoint with continuation support, search, sorting, selection and verified copying to editable playlists.
+- History is available as a channel-discovery and saved-feed source; backup/import preserves that source.
+- History cannot be deleted, used as a transfer destination, or modified through playlist edit operations. Its page links to YouTube for history removal/settings.
+- Updates the privacy notice and prepared Chrome Web Store listing to disclose local watch-history caching. No additional permissions or analytics.
+- Automated fixtures cover history parsing, pagination, copying without removal IDs, source retention, failed responses, destination restrictions and feed backup. Signed-in live History responses still need verification.
+- Store package refreshed; submission still requires publisher sign-in and review.
+
 # v0.2.3 store preparation and history migration
 
 Adds History > Import history to merge existing JSON exports into a new installation without changing YouTube videos. Validation rejects malformed records, strips unrelated fields and unsafe recovered links, preserves original playlist destinations and newer restoration state, and deduplicates records.

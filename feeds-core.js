@@ -67,7 +67,7 @@ export function validLibrary(data){
  const ids=new Set(data.categories.map(c=>c.id));
  const cats=v=>Array.isArray(v)&&v.every(x=>ids.has(x));
  if(data.channels.some(c=>!str(c.id,250)||!str(c.name,300)||!cats(c.cats)||typeof c.added!=='boolean'||(!channelIdValid(c.id)&&!c.id.startsWith('name:'))))throw new Error('Invalid channel data.');
- if(data.feeds.some(f=>!str(f.id,100)||!str(f.name,100)||!cats(f.cats)||typeof f.all!=='boolean'||!['uploads','saved'].includes(f.source)||!Array.isArray(f.playlists)||f.playlists.some(p=>p!=='WL'&&!/^PL[\w-]+$/.test(p))))throw new Error('Invalid saved feed data.');
+ if(data.feeds.some(f=>!str(f.id,100)||!str(f.name,100)||!cats(f.cats)||typeof f.all!=='boolean'||!['uploads','saved'].includes(f.source)||!Array.isArray(f.playlists)||f.playlists.some(p=>p!=='WL'&&p!=='FEhistory'&&!/^PL[\w-]+$/.test(p))))throw new Error('Invalid saved feed data.');
  return {categories:data.categories.map(c=>({id:c.id,name:c.name})),channels:data.channels.map(c=>({id:c.id,name:c.name,cats:c.cats,added:c.added})),feeds:data.feeds.map(f=>({id:f.id,name:f.name,cats:f.cats,all:f.all,source:f.source,playlists:f.playlists,...(typeof f.autoCategoryId==='string'&&ids.has(f.autoCategoryId)&&!f.all&&f.cats.length===1&&f.cats[0]===f.autoCategoryId?{autoCategoryId:f.autoCategoryId}:{})}))};
 }
 

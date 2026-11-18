@@ -3,7 +3,7 @@
 Status: prepared locally; not yet uploaded or submitted. Google developer sign-in is required.
 
 - Visibility: Unlisted. Free installation.
-- Package: `downloads/watch-later-webstore-v0.2.3.zip` (manifest at archive root).
+- Package: `downloads/watch-later-webstore-v0.2.4.zip` (manifest at archive root).
 - Upload assets: `store/assets/`.
 - Text, permission explanations and review instructions: `store/listing.json`.
 - Public privacy URL: https://github.com/omahacrab/watch-later/blob/main/PRIVACY.md

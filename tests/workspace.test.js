@@ -13,7 +13,7 @@ test('real workspace markup: comma pause, categories, feeds, copy, move from reg
  Object.defineProperty(window.HTMLInputElement.prototype,'checked',{configurable:true,get(){return this.hasAttribute('checked');},set(value){if(value)this.setAttribute('checked','');else this.removeAttribute('checked');}});
  const originalForm=globalThis.FormData;globalThis.FormData=class{constructor(form){this.data=[];form.querySelectorAll('input,select').forEach(i=>{if(i.name&&((i.type!=='checkbox'&&i.type!=='radio')||i.checked))this.data.push([i.name,i.value]);});}get(name){return this.data.find(x=>x[0]===name)?.[1]??null;}getAll(name){return this.data.filter(x=>x[0]===name).map(x=>x[1]);}has(name){return this.data.some(x=>x[0]===name);}};
  Object.defineProperty(globalThis.navigator,'locks',{configurable:true,value:{request:async(n,o,fn)=>fn({})}});
- const cache={},requests=[],playlists=new Map();
+ const cache={},requests=[],playlists=new Map();let historyFailure=false;
  function row(videoId,title,channel=A){return {setVideoId:`set-${videoId}`,videoId,title:{simpleText:title},shortBylineText:{runs:[{text:channel===A?'The Race':'Another channel',navigationEndpoint:{browseEndpoint:{browseId:channel}}}]},lengthText:{simpleText:'5:30'},thumbnailOverlays:[{thumbnailOverlayResumePlaybackRenderer:{percentDurationWatched:48}}]};}
  const originals=new Map([[id1,row(id1,'Race weekend')],[id2,row(id2,'Other video',B)]]);
  playlists.set('WL',[...originals.values()]);playlists.set('PL_TARGET',[]);
@@ -22,6 +22,7 @@ test('real workspace markup: comma pause, categories, feeds, copy, move from reg
  globalThis.chrome={storage:{local:{get:async keys=>structuredClone(keys===null?cache:Array.isArray(keys)?Object.fromEntries(keys.map(k=>[k,cache[k]])):{[keys]:cache[keys]}),set:async data=>Object.assign(cache,structuredClone(data))}},tabs:{query:async()=>[{id:1,title:'Watch Later - YouTube',url:'https://www.youtube.com/playlist?list=WL'}]},scripting:{executeScript:async({args:[operation,payload]})=>{
   requests.push({operation,...payload});if(operation==='identity')return [{result:{ok:true,account:'owner'}}];
   if(operation==='page-data')return response({});
+  if(operation==='browse'&&payload.playlistId==='FEhistory'){if(historyFailure)return response({unexpected:true});return response({sectionListRenderer:{contents:[{itemSectionRenderer:{contents:[{videoRenderer:row(upload,'Previously watched video')},...(!payload.token?[{continuationItemRenderer:{continuationEndpoint:{continuationCommand:{token:'history-next'}}}}]:[])]}}]}});}
   if(operation==='browse'){const rows=playlists.get(payload.playlistId||'WL')||[];return response({playlistVideoListRenderer:{contents:rows.map(playlistVideoRenderer=>({playlistVideoRenderer}))},playlistHeaderRenderer:{numVideosText:{simpleText:`${rows.length} videos`}}});}
   if(operation==='playlists')return response({addToPlaylistRenderer:{playlists:[{playlistAddToOptionRenderer:{playlistId:'PL_TARGET',title:{simpleText:'Target playlist'},videoCount:playlists.get('PL_TARGET').length}}]}});
   if(operation==='channel-search')return response({contents:{twoColumnSearchResultsRenderer:{primaryContents:{channelRenderer:{channelId:B,title:{simpleText:'Another channel'}}}}}});
@@ -40,7 +41,7 @@ test('real workspace markup: comma pause, categories, feeds, copy, move from reg
  try{
   await import('../app.js');await until(()=>$('connection').textContent.startsWith('Connected'),'connect');await $('load').onclick();
   assert.match($('matches').textContent,/2 loaded/);input('watch-later-cleaner-search','race');assert.match($('matches').textContent,/1 matching/);input('watch-later-cleaner-search','race,');assert.match($('matches').textContent,/2 matching/);assert.equal($('search-pills').children.length,1);input('watch-later-cleaner-search','other');assert.match($('matches').textContent,/2 matching/);$('clear-search').onclick();
-  assert.equal(document.querySelector('.build-version').textContent,'v0.2.3');
+  assert.equal(document.querySelector('.build-version').textContent,'v0.2.4');
   $('availability').value='available';$('availability').onchange();assert.match($('matches').textContent,/2 matching/);assert.equal($('clear-filters').hidden,false);$('clear-filters').onclick();assert.equal($('availability').value,'all');
   $('watch-filter').value='complete';$('watch-filter').dispatchEvent(new window.Event('input'));assert.match($('matches').textContent,/0 matching/);$('clear-filters').onclick();
   $('search-help-open').onclick();assert.match(document.querySelector('dialog[open]')?.textContent||document.querySelector('#workspace-dialog')?.textContent||document.body.textContent,/Find exactly what you want/);
@@ -71,5 +72,24 @@ test('real workspace markup: comma pause, categories, feeds, copy, move from reg
   const cookingId=savedLib.categories.find(c=>c.name==='Cooking').id;
   click('[data-ui="remove-channel-tag"][data-id="'+B+'"][data-tag="'+cookingId+'"]');await until(()=>!cache['feeds:owner'].channels.find(c=>c.id===B).cats.includes(cookingId),'remove inline tag');assert.ok(cache['feeds:owner'].feeds.some(f=>f.autoCategoryId===cookingId),'removing a channel tag keeps the reusable feed');
   click('[data-ui="feed-tab"]');const crime=cache['feeds:owner'].feeds.find(f=>f.name==='True crime');click('[data-ui="saved-feed"][data-id="'+crime.id+'"]');assert.match(document.querySelector('.feed-title').textContent,/True crime/);assert.match($('feeds-view').textContent,/1 channels/);
+
+  click('[data-view="playlists"]');await tick();
+  assert.equal(document.querySelector('[data-ui="delete-playlist"][data-id="FEhistory"]'),null);
+  click('[data-ui="open-playlist"][data-id="FEhistory"]');
+  await until(()=>$('current-playlist-title').textContent==='History'&&$('stop').disabled,'load YouTube history');
+  assert.match($('matches').textContent,/1 loaded/);assert.equal($('watch-history-note').hidden,false);
+  assert.ok(requests.some(r=>r.playlistId==='FEhistory'&&r.token==='history-next'));
+  assert.equal(cache['playlist:owner:FEhistory'].videos[0].setVideoId,'');
+  input('watch-later-cleaner-search','Previously');assert.match($('matches').textContent,/1 matching/);
+  $('select').onclick();assert.equal($('remove').hidden,true);assert.equal($('move').textContent,'Copy…');assert.equal($('move').disabled,false);
+  $('selected-view').onclick();assert.equal($('selected-remove').hidden,true);$('selected-dialog').close();
+  const historyCount=cache['history:owner'].length;
+  await $('move').onclick();assert.equal($('transfer-toggle').hidden,true);assert.equal($('move-playlists').querySelector('input[value="FEhistory"]'),null);
+  check=$('move-playlists').querySelector('input[value="PL_TARGET"]');check.checked=true;check.onchange();
+  await $('move-confirm').onclick();assert.ok(playlists.get('PL_TARGET').some(v=>v.videoId===upload));
+  assert.equal(cache['playlist:owner:FEhistory'].videos.length,1);assert.equal(cache['history:owner'].length,historyCount);
+  assert.equal(requests.some(r=>r.playlistId==='FEhistory'&&['remove','restore','add-to-playlist','delete-playlist'].includes(r.operation)),false);
+  historyFailure=true;await $('load').onclick();assert.match($('status').textContent,/unfamiliar History format/);assert.equal(cache['playlist:owner:FEhistory'].videos.length,1);
+  click('[data-view="watch"]');await tick();assert.equal($('current-playlist-title').textContent,'Watch Later');assert.equal($('watch-history-note').hidden,true);
  }finally{globalThis.FormData=originalForm;}
 });

@@ -65,7 +65,7 @@ export async function youtubeRequest(operation, payload = {}) {
       else {
         const playlist=payload.playlistId || 'WL';
         if(!/^[a-zA-Z0-9_-]+$/.test(playlist))throw new Error('Invalid playlist ID.');
-        body.browseId = `VL${playlist}`;
+        body.browseId = playlist === 'FEhistory' ? 'FEhistory' : `VL${playlist}`;
         if(typeof payload.params==='string' && playlist)body.params=payload.params;
       }
     } else {

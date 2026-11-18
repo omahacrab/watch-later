@@ -1,4 +1,5 @@
 import {parsePlaylist,mergeEntries,filterEntries,parseSearch} from './core.js';
+import {parseWatchHistory} from './watch-history.js';
 import {editablePlaylists,emptyDestination,verifyDestinationVideos} from './playlists.js';
 import {extractPlaylistTotal} from './counts.js';
 import {applyRecovered} from './recovery.js';
@@ -28,7 +29,7 @@ export function initWorkspace(api){
   const s=api.get();if(s.account!==owner){void hydrate();return;}
   if(owner)sourceCache.set(s.sourceId,s.state);
   $('back-playlists').hidden=s.sourceId==='WL';
-  $('playlists-nav-count').textContent=playlistList.length;$('playlists-nav-count').hidden=!playlistList.length;
+  $('playlists-nav-count').textContent=owner?playlistList.length+1:0;$('playlists-nav-count').hidden=!owner;
   $('feeds-nav-count').textContent=library.feeds.length;$('feeds-nav-count').hidden=!library.feeds.length;
   for(const id of ['playlists-refresh','playlist-create'])$(id).disabled=!ready();
   $('playlist-cards').querySelectorAll('[data-requires-account]').forEach(b=>b.disabled=!ready()||b.hasAttribute('data-blocked'));
@@ -62,11 +63,11 @@ export function initWorkspace(api){
   if(!dialog.open)dialog.showModal();sync();
  }
  dialog.addEventListener('cancel',e=>{if(api.get().busy)e.preventDefault();});
- function options(){return [{id:'WL',title:'Watch Later',videoCount:sourceCache.get('WL')?.youtubeCount?.value},...playlistList];}
+ function options(){return [{id:'WL',title:'Watch Later',videoCount:sourceCache.get('WL')?.youtubeCount?.value},...playlistList,{id:'FEhistory',title:'History',privacy:'YOUTUBE WATCH HISTORY',readOnly:true}];}
  function sourcePicker(chosen,kind){return `<div class="fchecks source-picker">${options().map(p=>`<label><input type="checkbox" data-source="${kind}" value="${esc(p.id)}" ${chosen.includes(p.id)?'checked':''}>${esc(p.title)}</label>`).join('')}</div>`;}
  function renderPlaylists(){
-  const query=$('playlist-search').value.trim().toLowerCase();const entries=playlistList.filter(p=>p.title.toLowerCase().includes(query));
-  $('playlist-cards').innerHTML=entries.map(p=>`<article class="playlistcard playlist-card"><div class="playlistidentity card-meta"><span class="playlisticon playlist-mark" aria-hidden="true">☷</span><span class="privacylabel privacy">${esc(p.privacy||'YOUR PLAYLIST')}</span></div><h2>${esc(p.title)}</h2><span class="muted">${shortCount(p)}</span><div class="actions">${btn('open-playlist','Manage playlist',`data-id="${esc(p.id)}" data-requires-account`)}${btn('delete-playlist','Delete',`data-id="${esc(p.id)}" class="danger-link" data-requires-account`)}</div></article>`).join('')||`<div class="empty">${owner?'No playlists shown. Refresh your playlists or create one.':'Connect to YouTube to load your playlists.'}</div>`;sync();
+  const query=$('playlist-search').value.trim().toLowerCase();const entries=options().filter(p=>p.id!=='WL').filter(p=>p.title.toLowerCase().includes(query));
+  $('playlist-cards').innerHTML=entries.map(p=>`<article class="playlistcard playlist-card"><div class="playlistidentity card-meta"><span class="playlisticon playlist-mark" aria-hidden="true">☷</span><span class="privacylabel privacy">${esc(p.privacy||'YOUR PLAYLIST')}</span></div><h2>${esc(p.title)}</h2><span class="muted">${p.readOnly?(sourceCache.has(p.id)?`${sourceCache.get(p.id).videos.length} videos loaded`:'Watched videos from YouTube'):shortCount(p)}</span><div class="actions">${btn('open-playlist',p.readOnly?'Browse history':'Manage playlist',`data-id="${esc(p.id)}" data-requires-account`)}${p.readOnly?'':btn('delete-playlist','Delete',`data-id="${esc(p.id)}" class="danger-link" data-requires-account`)}</div></article>`).join('')||`<div class="empty">${owner?'No playlists shown. Refresh your playlists or create one.':'Connect to YouTube to load your playlists.'}</div>`;sync();
  }
  async function refreshPlaylists(){if(!ready())return;await api.exclusive(async()=>{
   $('playlist-status').textContent='Reading your editable playlists…';const response=await api.fetchEditablePlaylists();
@@ -104,7 +105,7 @@ export function initWorkspace(api){
   do{
    if(api.isStopped())throw new Error('Playlist scan stopped. Previously loaded data is kept.');
    if(!first)result=await api.call('browse',{playlistId:id,token});
-   const parsed=first&&emptyDestination(result.data)?{videos:[],token:null}:parsePlaylist(result.data,first);
+   const parsed=id==='FEhistory'?parseWatchHistory(result.data):first&&emptyDestination(result.data)?{videos:[],token:null}:parsePlaylist(result.data,first);
    videos=mergeEntries(videos,parsed.videos);if(parsed.suspiciousEnd)throw new Error('YouTube did not return a usable next page. Previously loaded data is kept.');
    token=parsed.token;first=false;if(token&&visited.has(token))throw new Error('YouTube repeated a playlist page.');if(token)visited.add(token);if(visited.size>500)throw new Error('Playlist scan limit reached.');
    api.message(`Loading ${options().find(p=>p.id===id)?.title||'playlist'}: ${videos.length} videos…`);

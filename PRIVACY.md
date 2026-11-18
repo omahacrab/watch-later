@@ -4,15 +4,17 @@ Watch Later: YouTube Playlists & Feeds operates in your Chrome profile. There is
 
 ## Local storage
 
-The extension saves playlist metadata, selected channel/category/feed definitions, recovered information, and removal history in `chrome.storage.local`. Playlist IDs, video IDs, titles, channel names and timestamps may reveal your interests. Account data is separated using a hash of YouTube's account/session identity. It is not sent to the developer. Selections are held in memory; persistent feed choices and history stay local.
+The extension saves playlist metadata, YouTube watch-history videos you choose to load, selected channel/category/feed definitions, recovered information, and removal history in `chrome.storage.local`. Playlist IDs, video IDs, titles, channel names and timestamps may reveal your interests. Account data is separated using a hash of YouTube's account/session identity. It is not sent to the developer. Selections are held in memory; persistent feed choices and history stay local.
 
 Removal history is a product feature. It is retained when you clear a playlist cache so you can restore videos later. Uninstalling the extension can erase its local data. Exports are files you control and may contain personal viewing interests.
 
 ## YouTube access
 
-The extension needs access to `https://www.youtube.com/*` to run its request function in the signed-in YouTube tab you select. Authentication is generated inside that page. Cookie values and authorization headers are not returned to the extension UI, stored in exports, or sent to a developer server. Requests go to YouTube to read playlists/channels and carry out actions you choose. Thumbnail images load from YouTube's image servers.
+The extension needs access to `https://www.youtube.com/*` to run its request function in the signed-in YouTube tab you select. Authentication is generated inside that page. Cookie values and authorization headers are not returned to the extension UI, stored in exports, or sent to a developer server. Requests go to YouTube to read playlists/channels and your YouTube watch history when you choose it and carry out actions you choose. Thumbnail images load from YouTube's image servers.
 
 The `scripting` permission injects this request function. The `storage` permission saves your local workspace. The extension requests no access to unrelated websites or all browsing history.
+
+YouTube watch history is loaded only when you open its entry or explicitly select it as a feed/channel source. Its video IDs, titles and channel metadata are cached locally, separately from removal history. No browser-history permission is requested.
 
 ## Optional unavailable-video recovery
 

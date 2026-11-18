@@ -59,6 +59,13 @@ test('session transport: fixed endpoint, account checks, max 500 and explicit fa
     assert.equal(JSON.parse(sent.at(-1).options.body).query,'The Race');
     await youtubeRequest('channel-browse',{account:identity.account,channelId:'UC'+'a'.repeat(22),params:'returned-command'});
     assert.equal(JSON.parse(sent.at(-1).options.body).params,'returned-command');
+    await youtubeRequest('browse',{account:identity.account,playlistId:'FEhistory'});
+    assert.equal(JSON.parse(sent.at(-1).options.body).browseId,'FEhistory');
+    await youtubeRequest('browse',{account:identity.account,playlistId:'FEhistory',token:'history-next'});
+    assert.equal(JSON.parse(sent.at(-1).options.body).continuation,'history-next');
+    const historyRequests=sent.length;
+    for(const operation of ['remove','restore','add-to-playlist','delete-playlist'])assert.equal((await youtubeRequest(operation,{account:identity.account,playlistId:'FEhistory',ids:['sample']})).ok,false);
+    assert.equal(sent.length,historyRequests,'History cannot be mutated as a playlist');
     const beforeInvalid=sent.length;
     assert.equal((await youtubeRequest('add-to-playlist',{account:identity.account,playlistId:'LL',ids:['sample']})).ok,false);
     assert.equal(sent.length,beforeInvalid);
